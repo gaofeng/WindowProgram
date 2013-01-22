@@ -1,0 +1,32 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Graphic", "Graphic\Graphic.vcxproj", "{14244E0D-37BB-47E6-8CE0-526AA0806FF1}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WindowTest", "WindowTest\WindowTest.vcxproj", "{E1B8A71D-9DE2-4BD1-B907-C53F42E376A1}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MFCDialogGDI", "MFCDialogGDI\MFCDialogGDI.vcxproj", "{D231514D-7313-490E-9831-F62FF0B0421E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{14244E0D-37BB-47E6-8CE0-526AA0806FF1}.Debug|Win32.ActiveCfg = Debug|Win32
+		{14244E0D-37BB-47E6-8CE0-526AA0806FF1}.Debug|Win32.Build.0 = Debug|Win32
+		{14244E0D-37BB-47E6-8CE0-526AA0806FF1}.Release|Win32.ActiveCfg = Release|Win32
+		{14244E0D-37BB-47E6-8CE0-526AA0806FF1}.Release|Win32.Build.0 = Release|Win32
+		{E1B8A71D-9DE2-4BD1-B907-C53F42E376A1}.Debug|Win32.ActiveCfg = Debug|Win32
+		{E1B8A71D-9DE2-4BD1-B907-C53F42E376A1}.Debug|Win32.Build.0 = Debug|Win32
+		{E1B8A71D-9DE2-4BD1-B907-C53F42E376A1}.Release|Win32.ActiveCfg = Release|Win32
+		{E1B8A71D-9DE2-4BD1-B907-C53F42E376A1}.Release|Win32.Build.0 = Release|Win32
+		{D231514D-7313-490E-9831-F62FF0B0421E}.Debug|Win32.ActiveCfg = Debug|Win32
+		{D231514D-7313-490E-9831-F62FF0B0421E}.Debug|Win32.Build.0 = Debug|Win32
+		{D231514D-7313-490E-9831-F62FF0B0421E}.Release|Win32.ActiveCfg = Release|Win32
+		{D231514D-7313-490E-9831-F62FF0B0421E}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
