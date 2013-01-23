@@ -314,6 +314,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			ScrollWindow (hWnd, 0, -cyChar, &rectScroll, &rectScroll) ;
 			OutputDebugString(L"WM_KEY&SCROLL\n");
 		}
+		else
+		{
+			return DefWindowProc(hWnd, message, wParam, lParam);
+		}
 		break ;        // i.e., call DefWindowProc so Sys messages work
 
 	case WM_PAINT:
