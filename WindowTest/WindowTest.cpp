@@ -11,6 +11,9 @@ HINSTANCE hInst;								// current instance
 TCHAR szTitle[MAX_LOADSTRING];					// The title bar text
 TCHAR szWindowClass[MAX_LOADSTRING];			// the main window class name
 
+//显示模式，0表示空，1表示显示键盘按键信息
+int DisplayMode = 0;
+
 // Forward declarations of functions included in this code module:
 ATOM				MyRegisterClass(HINSTANCE hInstance);
 BOOL				InitInstance(HINSTANCE, int);
@@ -167,7 +170,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	static HWND hwndButton;
 	TCHAR        szBuffer[128], szKeyName [32] ;
 	TEXTMETRIC   tm ;
-	SHORT shift_state, ctrl_state, alt_state;
+	int mouse_x, mouse_y;
+	HMENU      hMenu ;
 
 	switch (message)
 	{
@@ -176,6 +180,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 // 		hwndButton = CreateWindow(TEXT("button"), TEXT("TEST"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 
 // 			5, 5, 40, 20, hWnd, (HMENU)BUTTON_ID, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 // 		break;
+		hMenu = GetMenu(hWnd);
+		CheckMenuItem(hMenu, ID_FUNCTION_NORMAL, MF_CHECKED);
 
 		//the display resolution has changed
 	case WM_DISPLAYCHANGE:
@@ -224,6 +230,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		OutputDebugString(L"WM_SHOWWINDOW\n");
 		break;
 	case WM_COMMAND:
+		hMenu = GetMenu(hWnd);
 		wmId    = LOWORD(wParam);
 		wmEvent = HIWORD(wParam);
 		// Parse the menu selections:
@@ -238,9 +245,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case BUTTON_ID:
 			ShowWindow(hWnd, FALSE);
 			break;
+		case ID_FUNCTION_KEYBOARD:
+			CheckMenuItem (hMenu, wmId, MF_CHECKED);
+			CheckMenuItem(hMenu, ID_FUNCTION_NORMAL, MF_UNCHECKED);
+			DisplayMode = 1;
+			//强制界面重绘
+			InvalidateRect (hWnd, NULL, TRUE) ;
+			break;
+		case ID_FUNCTION_NORMAL:
+			CheckMenuItem (hMenu, wmId, MF_CHECKED);
+			CheckMenuItem(hMenu, ID_FUNCTION_KEYBOARD, MF_UNCHECKED);
+			DisplayMode = 0;
+			//强制界面重绘
+			InvalidateRect (hWnd, NULL, TRUE) ;
+			break;
+
 		default:
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
+		break;
+	case WM_SYSCOMMAND:
+		mouse_x = HIWORD(lParam);
+		mouse_y = LOWORD(lParam);
+		wsprintf(szBuffer, L"Mouse Pos: X:%d, Y:%d\n", mouse_x, mouse_y);
+		OutputDebugString(szBuffer);
+		return DefWindowProc(hWnd, message, wParam, lParam);
 		break;
 	case WM_KEYDOWN:
 	case WM_KEYUP:
@@ -250,71 +279,78 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_SYSKEYUP:
 	case WM_SYSCHAR:
 	case WM_SYSDEADCHAR: 
-		// Rearrange storage array
-		for (i = cLinesMax - 1 ; i > 0 ; i--)
+		if (DisplayMode == 1)
 		{
-			pmsg[i] = pmsg[i - 1] ;
-			state_array[i] = state_array[i - 1];
-		}
-		// Store new message
-		pmsg[0].hwnd = hWnd ;
-		pmsg[0].message = message ;
-		pmsg[0].wParam = wParam ;
-		pmsg[0].lParam = lParam ;
+			// Rearrange storage array
+			for (i = cLinesMax - 1 ; i > 0 ; i--)
+			{
+				pmsg[i] = pmsg[i - 1] ;
+				state_array[i] = state_array[i - 1];
+			}
+			// Store new message
+			pmsg[0].hwnd = hWnd ;
+			pmsg[0].message = message ;
+			pmsg[0].wParam = wParam ;
+			pmsg[0].lParam = lParam ;
 
-		state_array[0] = 0;
-		// 检查按键状态
-		if (GetKeyState(VK_SHIFT) & 0x8000)
-		{
-			state_array[0] |= 1;
-		}
-		if (GetKeyState(VK_CONTROL) & 0x8000)
-		{
-			state_array[0] |= 2;
-		}
-		if (GetKeyState(VK_MENU) & 0x8000)
-		{
-			state_array[0] |= 4;
-		}
+			state_array[0] = 0;
+			// 检查按键状态
+			if (GetKeyState(VK_SHIFT) & 0x8000)
+			{
+				state_array[0] |= 1;
+			}
+			if (GetKeyState(VK_CONTROL) & 0x8000)
+			{
+				state_array[0] |= 2;
+			}
+			if (GetKeyState(VK_MENU) & 0x8000)
+			{
+				state_array[0] |= 4;
+			}
 
-		cLines = min(cLines + 1, cLinesMax) ;
+			cLines = min(cLines + 1, cLinesMax) ;
 
-		// Scroll up the display
-		ScrollWindow (hWnd, 0, -cyChar, &rectScroll, &rectScroll) ;
-		OutputDebugString(L"WM_KEY&SCROLL\n");
+			// Scroll up the display
+			ScrollWindow (hWnd, 0, -cyChar, &rectScroll, &rectScroll) ;
+			OutputDebugString(L"WM_KEY&SCROLL\n");
+		}
 		break ;        // i.e., call DefWindowProc so Sys messages work
 
 	case WM_PAINT:
 		hdc = BeginPaint (hWnd, &ps) ;
-		SelectObject (hdc, GetStockObject (SYSTEM_FIXED_FONT)) ;
-		SetBkMode (hdc, TRANSPARENT) ;
-		TextOut (hdc, 0, 0, szTop, lstrlen (szTop)) ;
-		TextOut (hdc, 0, 0, szUnd, lstrlen (szUnd)) ;
-
-		for (i = 0 ; i < min (cLines, cyClient / cyChar - 1) ; i++)
+		if (DisplayMode == 1)
 		{
-			iType = pmsg[i].message == WM_CHAR || pmsg[i].message == WM_SYSCHAR ||
-				pmsg[i].message == WM_DEADCHAR || pmsg[i].message == WM_SYSDEADCHAR;
+			SelectObject (hdc, GetStockObject (SYSTEM_FIXED_FONT)) ;
+			SetBkMode (hdc, TRANSPARENT) ;
+			TextOut (hdc, 0, 0, szTop, lstrlen (szTop)) ;
+			TextOut (hdc, 0, 0, szUnd, lstrlen (szUnd)) ;
 
-			GetKeyNameText(pmsg[i].lParam, szKeyName, sizeof(szKeyName) / sizeof(TCHAR));
+			for (i = 0 ; i < min (cLines, cyClient / cyChar - 1) ; i++)
+			{
+				iType = pmsg[i].message == WM_CHAR || pmsg[i].message == WM_SYSCHAR ||
+					pmsg[i].message == WM_DEADCHAR || pmsg[i].message == WM_SYSDEADCHAR;
 
-			TextOut (hdc, 0, (cyClient / cyChar - 1 - i) * cyChar, szBuffer,
-				wsprintf (szBuffer, szFormat [iType],
-				szMessage [pmsg[i].message - WM_KEYFIRST],
-				pmsg[i].wParam,
-				(PTSTR) (iType ? TEXT (" ") : szKeyName),	//KEYSTROKE
-				(TCHAR) (iType ? pmsg[i].wParam : ' '),		//CHAR
-				LOWORD (pmsg[i].lParam),		//16-bit repeat count
-				HIWORD (pmsg[i].lParam) & 0xFF,	//8-bit OEM scan code
-				0x01000000 & pmsg[i].lParam ? szYes  : szNo,
-				0x20000000 & pmsg[i].lParam ? szYes  : szNo,
-				0x40000000 & pmsg[i].lParam ? szDown : szUp,
-				0x80000000 & pmsg[i].lParam ? szUp   : szDown,
-				0x00000001 & state_array[i] ? szDown : szUp,
-				0x00000002 & state_array[i] ? szDown : szUp,
-				0x00000004 & state_array[i] ? szDown : szUp
-				)) ;
+				GetKeyNameText(pmsg[i].lParam, szKeyName, sizeof(szKeyName) / sizeof(TCHAR));
+
+				TextOut (hdc, 0, (cyClient / cyChar - 1 - i) * cyChar, szBuffer,
+					wsprintf (szBuffer, szFormat [iType],
+					szMessage [pmsg[i].message - WM_KEYFIRST],
+					pmsg[i].wParam,
+					(PTSTR) (iType ? TEXT (" ") : szKeyName),	//KEYSTROKE
+					(TCHAR) (iType ? pmsg[i].wParam : ' '),		//CHAR
+					LOWORD (pmsg[i].lParam),		//16-bit repeat count
+					HIWORD (pmsg[i].lParam) & 0xFF,	//8-bit OEM scan code
+					0x01000000 & pmsg[i].lParam ? szYes  : szNo,
+					0x20000000 & pmsg[i].lParam ? szYes  : szNo,
+					0x40000000 & pmsg[i].lParam ? szDown : szUp,
+					0x80000000 & pmsg[i].lParam ? szUp   : szDown,
+					0x00000001 & state_array[i] ? szDown : szUp,
+					0x00000002 & state_array[i] ? szDown : szUp,
+					0x00000004 & state_array[i] ? szDown : szUp
+					)) ;
+			}
 		}
+
 		EndPaint (hWnd, &ps) ;
 		OutputDebugString(L"WM_PAINT\n");
 		return 0 ;
