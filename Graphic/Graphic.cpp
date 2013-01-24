@@ -138,7 +138,7 @@ BITMAPFILEHEADER * DibLoadImage (PTSTR pstrFileName)
 	return pbmfh ;
 }
 
-static SIZE sizeBG;
+static SIZE sizeDest;
 
 static TCHAR Name[32];//Max 30
 static TCHAR Gender[8];
@@ -164,10 +164,7 @@ static POINT posIDNum;
 static int FontHeight;
 static int AddressMaxLen;
 
-static HDC hdcPhoto;
-static HDC maskDC;
-static HDC InvertMaskDC;
-static HDC hdcBG;
+static HDC hdcDest;
 
 void CalcElementsPos(SIZE bg)
 {
@@ -177,63 +174,69 @@ void CalcElementsPos(SIZE bg)
 	posPhoto.y = (LONG)(bg.cy * 0.115);
 
 	//字体大小
-	FontHeight = (LONG)(sizeBG.cy * 0.07);
+	FontHeight = (LONG)(sizeDest.cy * 0.07);
 	//姓名位置
-	posName.x = (LONG)(sizeBG.cx * 0.2);
-	posName.y = (LONG)(sizeBG.cy * 0.145);
+	posName.x = (LONG)(sizeDest.cx * 0.2);
+	posName.y = (LONG)(sizeDest.cy * 0.145);
 	//性别位置
-	posGender.x = (LONG)(sizeBG.cx * 0.2);
-	posGender.y = (LONG)(sizeBG.cy * 0.265);
+	posGender.x = (LONG)(sizeDest.cx * 0.2);
+	posGender.y = (LONG)(sizeDest.cy * 0.265);
 	//民族位置
-	posNationality.x = (LONG)(sizeBG.cx * 0.4);
-	posNationality.y = (LONG)(sizeBG.cy * 0.265);
+	posNationality.x = (LONG)(sizeDest.cx * 0.4);
+	posNationality.y = (LONG)(sizeDest.cy * 0.265);
 
 	//生日位置
-	posBirthdayYear.x = (LONG)(sizeBG.cx * 0.2);
-	posBirthdayYear.y = (LONG)(sizeBG.cy * 0.39);
-	posBirthdayMonth.x = (LONG)(sizeBG.cx * 0.345);
-	posBirthdayMonth.y = (LONG)(sizeBG.cy * 0.39);
-	posBirthdayDay.x = (LONG)(sizeBG.cx * 0.425);
-	posBirthdayDay.y = (LONG)(sizeBG.cy * 0.39);
+	posBirthdayYear.x = (LONG)(sizeDest.cx * 0.2);
+	posBirthdayYear.y = (LONG)(sizeDest.cy * 0.39);
+	posBirthdayMonth.x = (LONG)(sizeDest.cx * 0.345);
+	posBirthdayMonth.y = (LONG)(sizeDest.cy * 0.39);
+	posBirthdayDay.x = (LONG)(sizeDest.cx * 0.425);
+	posBirthdayDay.y = (LONG)(sizeDest.cy * 0.39);
 
 	//地址位置
-	posAddress.x = (LONG)(sizeBG.cx * 0.2);
-	posAddress.y = (LONG)(sizeBG.cy * 0.518);
-	AddressMaxLen = (LONG)(sizeBG.cx * 0.42);
+	posAddress.x = (LONG)(sizeDest.cx * 0.2);
+	posAddress.y = (LONG)(sizeDest.cy * 0.518);
+	AddressMaxLen = (LONG)(sizeDest.cx * 0.42);
 
 	//身份证号码地址
-	posIDNum.x = (LONG)(sizeBG.cx * 0.345);
-	posIDNum.y = (LONG)(sizeBG.cy * 0.825);
+	posIDNum.x = (LONG)(sizeDest.cx * 0.345);
+	posIDNum.y = (LONG)(sizeDest.cy * 0.825);
 }
 
 void DrawIDPicture(HWND hWnd)
 {
 	HDC hdc;
+	static HDC hdcPhoto;
+	static HDC hdcMask;
+	static HDC hdcInvertMask;
+	static HDC hdcBG;
 	//retrieves the device context (DC) for the entire window
 	hdc = GetDC(hWnd);
 	// creates a memory device context (DC) compatible with the specified device
 	hdcPhoto = CreateCompatibleDC(hdc);
 	hdcBG = CreateCompatibleDC(hdc);
-	HDC hdc_origBG;
-	hdc_origBG = CreateCompatibleDC(hdc);
-
-	BITMAP bitmap;
 
 	//读取背景图片
-	HBITMAP hBGOrig;
-	hBGOrig = (HBITMAP)LoadImage(NULL, L"D:\\A.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-	GetObject(hBGOrig, sizeof(bitmap), &bitmap);
-	sizeBG.cx = bitmap.bmWidth;
-	sizeBG.cy = bitmap.bmHeight;
-	SelectObject(hdc_origBG, (HGDIOBJ)hBGOrig);
-	HBITMAP hGB = CreateCompatibleBitmap(hdc, sizeBG.cx, sizeBG.cy);
-	SelectObject(hdcBG, (HGDIOBJ)hGB);
-	StretchBlt(hdcBG, 0, 0, sizeBG.cx, sizeBG.cy, hdc_origBG, 0, 0, sizeBG.cx, sizeBG.cy, MERGECOPY);
+	HBITMAP hBG;
+	hBG = (HBITMAP)LoadImage(NULL, L"D:\\A.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	//得到背景图信息
+	BITMAP bitmap;
+	SelectObject(hdcBG, (HGDIOBJ)hBG);
+	GetObject(hBG, sizeof(bitmap), &bitmap);
+	//计算最终大小
+	sizeDest.cx = (LONG)(bitmap.bmWidth * 0.7);
+	sizeDest.cy = (LONG)(bitmap.bmHeight * 0.7);
+	
+	//创建目标DC
+	hdcDest = CreateCompatibleDC(hdc);
+	HBITMAP hDest = CreateCompatibleBitmap(hdcBG, sizeDest.cx, sizeDest.cy);
+	SelectObject(hdcDest, hDest);
+	//背景缩放拷贝
+	int old_iStretchMode = SetStretchBltMode(hdcDest, HALFTONE);
+	StretchBlt(hdcDest, 0, 0, sizeDest.cx, sizeDest.cy, hdcBG, 0, 0, bitmap.bmWidth, bitmap.bmHeight, SRCCOPY);
 
-	DeleteObject(hBGOrig);
-
-	//计算尺寸
-	CalcElementsPos(sizeBG);
+	//根据最终大小计算其他元素的位置和尺寸
+	CalcElementsPos(sizeDest);
 
 	HBITMAP hPhoto;
 	hPhoto = (HBITMAP)LoadImage(NULL, L"D:\\370102198502152134.bmp", IMAGE_BITMAP, sizePhoto.cx, sizePhoto.cy, LR_LOADFROMFILE);
@@ -242,14 +245,14 @@ void DrawIDPicture(HWND hWnd)
 	SelectObject(hdcPhoto, (HGDIOBJ)hPhoto);
 
 	//创建蒙板
-	maskDC = CreateCompatibleDC(NULL);
-	InvertMaskDC = CreateCompatibleDC(NULL);
-	HBITMAP hMaskBmp;
-	hMaskBmp = CreateBitmap(sizePhoto.cx, sizePhoto.cy, 1, 1, 0);
-	SelectObject(maskDC, hMaskBmp);
-	HBITMAP hMaskBmp2;
-	hMaskBmp2 = CreateBitmap(sizePhoto.cx, sizePhoto.cy, 1, 1, 0);
-	SelectObject(InvertMaskDC, hMaskBmp2);
+	hdcMask = CreateCompatibleDC(NULL);
+	hdcInvertMask = CreateCompatibleDC(NULL);
+	HBITMAP hMask;
+	hMask = CreateBitmap(sizePhoto.cx, sizePhoto.cy, 1, 1, 0);
+	SelectObject(hdcMask, hMask);
+	HBITMAP hInvertMask;
+	hInvertMask = CreateBitmap(sizePhoto.cx, sizePhoto.cy, 1, 1, 0);
+	SelectObject(hdcInvertMask, hInvertMask);
 
 	COLORREF transcolor,WhiteColor;
 	BOOL ret;
@@ -257,32 +260,36 @@ void DrawIDPicture(HWND hWnd)
 	transcolor= GetPixel(hdcPhoto,1,1);
 	SetBkColor(hdcPhoto, transcolor);
 	//转换为黑白蒙板图时，背景色转换为白色，其他颜色转换为黑色
-	ret = BitBlt(maskDC, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
+	ret = BitBlt(hdcMask, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
 	//背景色为黑色，其他颜色为白色，与上一个图片相反
-	ret = BitBlt(InvertMaskDC, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, NOTSRCCOPY);
+	ret = BitBlt(hdcInvertMask, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, NOTSRCCOPY);
 
 	//设置背景色为白色
 	WhiteColor = RGB(255, 255, 255);
 	SetBkColor(hdcPhoto, WhiteColor);
 	//将黑白蒙板的白色位置像素全部设置为之前设置的背景色，其他颜色进行OR操作。
 	//即将相片背景色改为白色。
-	BitBlt(hdcPhoto, 0, 0, sizePhoto.cx, sizePhoto.cy, maskDC, 0, 0, SRCPAINT);
+	BitBlt(hdcPhoto, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcMask, 0, 0, SRCPAINT);
 
 	//将反转黑白蒙板与背景图进行OR操作，即前景位置像素设置为白色，背景像素颜色不变。
 	//即头像位置像素设为白色
-	BitBlt(hdcBG, posPhoto.x, posPhoto.y, sizePhoto.cx, sizePhoto.cy, InvertMaskDC, 1, 0, SRCPAINT);
+	BitBlt(hdcDest, posPhoto.x, posPhoto.y, sizePhoto.cx, sizePhoto.cy, hdcInvertMask, 1, 0, SRCPAINT);
 	//将处理后的头像与背景图进行AND操作，达到背景图透明的效果。
-	BitBlt(hdcBG, posPhoto.x, posPhoto.y, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCAND);
+	BitBlt(hdcDest, posPhoto.x, posPhoto.y, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCAND);
 
+	DeleteObject(hBG);
 	DeleteObject(hPhoto);
-	DeleteObject(hMaskBmp);
-	DeleteObject(hMaskBmp2);
-	DeleteObject(hGB);
+	DeleteObject(hMask);
+	DeleteObject(hInvertMask);
+	DeleteDC(hdcMask);
+	DeleteDC(hdcInvertMask);
+	DeleteDC(hdcPhoto);
+	DeleteDC(hdcBG);
 
 	LOGFONT lf;
 	HFONT largeFont;
 	HFONT smallFont;
-	SetBkMode (hdcBG, TRANSPARENT);
+	SetBkMode (hdcDest, TRANSPARENT);
 	ZeroMemory(&lf, sizeof(LOGFONT));
 	lf.lfCharSet = GB2312_CHARSET;
 	wcscpy_s(lf.lfFaceName, L"黑体");
@@ -304,14 +311,14 @@ void DrawIDPicture(HWND hWnd)
 	wcscpy_s(IDNum, L"370102198502152134");
 
 	//绘制文本
-	SelectObject(hdcBG, largeFont);
-	TextOut (hdcBG, posName.x, posName.y, Name, wcslen(Name));
-	SelectObject(hdcBG, smallFont);
-	TextOut (hdcBG, posGender.x, posGender.y, Gender, wcslen(Gender)) ;
-	TextOut (hdcBG, posNationality.x, posNationality.y, Nationality, wcslen(Nationality)) ;
-	TextOut (hdcBG, posBirthdayYear.x, posBirthdayYear.y, Year, wcslen(Year)) ;
-	TextOut (hdcBG, posBirthdayMonth.x, posBirthdayMonth.y, Month, wcslen(Month)) ;
-	TextOut (hdcBG, posBirthdayDay.x, posBirthdayDay.y, Day, wcslen(Day)) ;
+	SelectObject(hdcDest, largeFont);
+	TextOut (hdcDest, posName.x, posName.y, Name, wcslen(Name));
+	SelectObject(hdcDest, smallFont);
+	TextOut (hdcDest, posGender.x, posGender.y, Gender, wcslen(Gender)) ;
+	TextOut (hdcDest, posNationality.x, posNationality.y, Nationality, wcslen(Nationality)) ;
+	TextOut (hdcDest, posBirthdayYear.x, posBirthdayYear.y, Year, wcslen(Year)) ;
+	TextOut (hdcDest, posBirthdayMonth.x, posBirthdayMonth.y, Month, wcslen(Month)) ;
+	TextOut (hdcDest, posBirthdayDay.x, posBirthdayDay.y, Day, wcslen(Day)) ;
 	//判断换回
 	int offset = 0;
 	int address_len = wcslen(Address);
@@ -319,10 +326,10 @@ void DrawIDPicture(HWND hWnd)
 	SIZE str_size;
 	while (offset < address_len)
 	{
-		GetTextExtentPoint32(hdcBG, pAddr, offset, &str_size);
+		GetTextExtentPoint32(hdcDest, pAddr, offset, &str_size);
 		if (str_size.cx > AddressMaxLen)
 		{
-			TextOut (hdcBG, posAddress.x, posAddress.y, pAddr, offset) ;
+			TextOut (hdcDest, posAddress.x, posAddress.y, pAddr, offset) ;
 			posAddress.y += (LONG)(FontHeight * 1.18);
 			pAddr += offset;
 			address_len -= offset;
@@ -330,14 +337,106 @@ void DrawIDPicture(HWND hWnd)
 		}
 		offset++;
 	}
-	TextOut (hdcBG, posAddress.x, posAddress.y, pAddr, address_len) ;
+	TextOut (hdcDest, posAddress.x, posAddress.y, pAddr, address_len) ;
 
+	SelectObject(hdcDest, largeFont);
+	TextOut (hdcDest, posIDNum.x, posIDNum.y, IDNum, wcslen(IDNum)) ;
 
-	SelectObject(hdcBG, largeFont);
-	TextOut (hdcBG, posIDNum.x, posIDNum.y, IDNum, wcslen(IDNum)) ;
-
-	DeleteObject(smallFont);
 	DeleteObject(largeFont);
+	DeleteObject(smallFont);
+
+	//输出到BMP文件
+	TCHAR szFileName[MAX_PATH];
+	unsigned long ensize=0;
+	BITMAP bmp;
+	GetObject(hDest,sizeof(BITMAP),(void *)&bmp);
+
+	WORD    cClrBits;
+	// Convert the color format to a count of bits.  
+	cClrBits = (WORD)(bmp.bmPlanes * bmp.bmBitsPixel); 
+	if (cClrBits == 1) 
+		cClrBits = 1; 
+	else if (cClrBits <= 4) 
+		cClrBits = 4; 
+	else if (cClrBits <= 8) 
+		cClrBits = 8; 
+	else if (cClrBits <= 16) 
+		cClrBits = 16; 
+	else if (cClrBits <= 24) 
+		cClrBits = 24; 
+	else cClrBits = 32; 
+
+	// Allocate memory for the BITMAPINFO structure. (This structure  
+	// contains a BITMAPINFOHEADER structure and an array of RGBQUAD  
+	// data structures.)  
+
+	PBITMAPINFO pbmi; 
+	if (cClrBits < 24)
+	{
+		pbmi = (PBITMAPINFO) LocalAlloc(LPTR, sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * (1<< cClrBits)); 
+	}
+
+	else 
+	{
+		// There is no RGBQUAD array for these formats: 24-bit-per-pixel or 32-bit-per-pixel 
+		pbmi = (PBITMAPINFO) LocalAlloc(LPTR, sizeof(BITMAPINFOHEADER));
+	}
+	// Initialize the fields in the BITMAPINFO structure.  
+
+	pbmi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER); 
+	pbmi->bmiHeader.biWidth = bmp.bmWidth; 
+	pbmi->bmiHeader.biHeight = bmp.bmHeight; 
+	pbmi->bmiHeader.biPlanes = bmp.bmPlanes; 
+	pbmi->bmiHeader.biBitCount = bmp.bmBitsPixel; 
+	if (cClrBits < 24) 
+		pbmi->bmiHeader.biClrUsed = (1<<cClrBits); 
+
+	// If the bitmap is not compressed, set the BI_RGB flag.  
+	pbmi->bmiHeader.biCompression = BI_RGB; 
+
+	// Compute the number of bytes in the array of color  
+	// indices and store the result in biSizeImage.  
+	// The width must be DWORD aligned unless the bitmap is RLE 
+	// compressed. 
+	pbmi->bmiHeader.biSizeImage = ((pbmi->bmiHeader.biWidth * cClrBits +31) & ~31) /8
+		* pbmi->bmiHeader.biHeight; 
+	// Set biClrImportant to 0, indicating that all of the  
+	// device colors are important.  
+	pbmi->bmiHeader.biClrImportant = 0;
+
+	LPBYTE lpBits; // memory pointer
+	lpBits = (LPBYTE) LocalAlloc(LPTR, pbmi->bmiHeader.biSizeImage);
+
+	if (!lpBits);
+		//MALLOC ERROR;
+	// Retrieve the color table (RGBQUAD array) and the bits  
+	// (array of palette indices) from the DIB.  
+	if (!GetDIBits(hdcDest, hDest, 0, (WORD) pbmi->bmiHeader.biHeight, lpBits, pbmi, DIB_RGB_COLORS)) 
+	{
+		//errhandler("GetDIBits", hwnd); 
+	}
+
+	BITMAPFILEHEADER bfh;
+	bfh.bfType = ((WORD)('M'<< 8)|'B');
+	// Compute the size of the entire file. 
+	bfh.bfSize = (DWORD) (sizeof(BITMAPFILEHEADER) + 
+		pbmi->bmiHeader.biSize + pbmi->bmiHeader.biClrUsed 
+		* sizeof(RGBQUAD) + pbmi->bmiHeader.biSizeImage);
+	// Compute the offset to the array of color indices. 
+	bfh.bfOffBits = (DWORD) sizeof(BITMAPFILEHEADER) + 
+		pbmi->bmiHeader.biSize + pbmi->bmiHeader.biClrUsed 
+		* sizeof (RGBQUAD);
+	bfh.bfReserved1 = bfh.bfReserved2 = 0;
+
+	wsprintf(szFileName, TEXT("d:\\idcard_front.bmp"));
+	HANDLE hFile = CreateFile(szFileName,GENERIC_READ|GENERIC_WRITE,0,NULL,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+
+	//写入文件头
+	WriteFile(hFile, &bfh, sizeof(BITMAPFILEHEADER), &ensize, NULL);
+	//写入位图信息（包括信息头和可选的配色板）
+	WriteFile(hFile, pbmi, sizeof(BITMAPINFOHEADER)+ pbmi->bmiHeader.biClrUsed * sizeof (RGBQUAD), &ensize, NULL);
+	WriteFile(hFile, lpBits, pbmi->bmiHeader.biSizeImage, &ensize, NULL);
+	CloseHandle(hFile);
 
 	ReleaseDC (hWnd, hdc) ;
 }
@@ -425,7 +524,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		hdc = BeginPaint(hWnd, &ps);
 
 		//显示最终结果
- 		BitBlt(hdc, 0, 0, sizeBG.cx, sizeBG.cy, hdcBG, 0, 0, SRCCOPY);
+		BitBlt(hdc, 0, 0, sizeDest.cx, sizeDest.cy, hdcDest, 0, 0, SRCCOPY);
 		//BitBlt(hdc, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
 
 		EndPaint(hWnd, &ps);
