@@ -7,10 +7,8 @@
 #define WND_WIDTH 1100
 #define WND_HEIGHT 800
 
-#define PHOTO_X 600
-#define PHOTO_Y 100
-#define PHOTO_CX 204 
-#define PHOTO_CY 252
+/*照片位置*/
+static RECT rectPhoto;
 
 static HDC hdcPhoto;
 static HDC maskDC;
@@ -149,6 +147,14 @@ BITMAPFILEHEADER * DibLoadImage (PTSTR pstrFileName)
 	return pbmfh ;
 }
 
+void CalcPhotoPos(SIZE bg, RECT& photo)
+{
+	photo.right = (LONG)(bg.cx * 26 / 85.6);
+	photo.bottom = bg.cy * 32 / 54;
+	photo.left = (LONG)(bg.cx * 0.63);
+	photo.top = (LONG)(bg.cy * 0.115);
+}
+
 //
 //   FUNCTION: InitInstance(HINSTANCE, int)
 //
@@ -187,16 +193,10 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	//    bmpInfo.bmiHeader.biSize = sizeof(bmpInfo.bmiHeader);
 	//    GetDIBits(hBgd, hBmp, 0, 0, NULL, &bmpInfo, DIB_RGB_COLORS);
 	// 
-	HBITMAP hPhoto;
-	hPhoto = (HBITMAP)LoadImage(NULL, L"D:\\zp_green.bmp", IMAGE_BITMAP, PHOTO_CX, PHOTO_CY, LR_LOADFROMFILE);
-	//获取长和高
+
 	BITMAP bitmap;
-	GetObject(hPhoto, sizeof(bitmap), &bitmap);
-	sizePhoto.cx = bitmap.bmWidth;
-	sizePhoto.cy = bitmap.bmHeight;
-	SelectObject(hdcPhoto, (HGDIOBJ)hPhoto);
 
-
+	//读取背景图片
 	HBITMAP hBGOrig;
 	hBGOrig = (HBITMAP)LoadImage(NULL, L"D:\\A.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
 	GetObject(hBGOrig, sizeof(bitmap), &bitmap);
@@ -206,6 +206,18 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	HBITMAP hGB = CreateCompatibleBitmap(hdc, sizeBG.cx, sizeBG.cy);
 	SelectObject(hdcBG, (HGDIOBJ)hGB);
 	StretchBlt(hdcBG, 0, 0, sizeBG.cx, sizeBG.cy, hdc_origBG, 0, 0, sizeBG.cx, sizeBG.cy, MERGECOPY);
+
+	CalcPhotoPos(sizeBG, rectPhoto);
+
+	HBITMAP hPhoto;
+	hPhoto = (HBITMAP)LoadImage(NULL, L"D:\\zp_yuan.bmp", IMAGE_BITMAP, rectPhoto.right, rectPhoto.bottom, LR_LOADFROMFILE);
+	//获取长和高
+
+	GetObject(hPhoto, sizeof(bitmap), &bitmap);
+	sizePhoto.cx = bitmap.bmWidth;
+	sizePhoto.cy = bitmap.bmHeight;
+	SelectObject(hdcPhoto, (HGDIOBJ)hPhoto);
+
 
 	//创建蒙板
 	maskDC = CreateCompatibleDC(NULL);
@@ -293,14 +305,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		//将反转黑白蒙板与背景图进行OR操作，即前景位置像素设置为白色，背景像素颜色不变。
  		//即头像位置像素设为白色
-		BitBlt(hdcBG, PHOTO_X, PHOTO_Y, sizePhoto.cx, sizePhoto.cy, InvertMaskDC, 0, 0, SRCPAINT);
+		BitBlt(hdcBG, rectPhoto.left, rectPhoto.top, sizePhoto.cx, sizePhoto.cy, InvertMaskDC, 0, 0, SRCPAINT);
 		//将处理后的头像与背景图进行AND操作，达到背景图透明的效果。
-   		BitBlt(hdcBG, PHOTO_X, PHOTO_Y, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCAND);
+   		BitBlt(hdcBG, rectPhoto.left, rectPhoto.top, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCAND);
 		//显示最终结果
  		BitBlt(hdc, 0, 0, sizeBG.cx, sizeBG.cy, hdcBG, 0, 0, SRCCOPY);
 		//BitBlt(hdc, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
-		TextOut (hdc, 0, 0, L"Hello World", 11) ;
-		TextOut (hdc, 0, cyChar, L"My name is Jim", 14) ;
+// 		TextOut (hdc, 0, 0, L"Hello World", 11) ;
+// 		TextOut (hdc, 0, cyChar, L"My name is Jim", 14) ;
 
 		EndPaint(hWnd, &ps);
 		break;
