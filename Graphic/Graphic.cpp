@@ -7,15 +7,21 @@
 #define WND_WIDTH 1100
 #define WND_HEIGHT 800
 
+static SIZE sizeBG;
+
 /*照片位置*/
-static RECT rectPhoto;
+static SIZE sizePhoto;
+static POINT posPhoto;
+static POINT posName;
+static POINT posGender;
+static POINT posNationality;
+
+static int FontHeight;
 
 static HDC hdcPhoto;
 static HDC maskDC;
 static HDC InvertMaskDC;
 static HDC hdcBG;
-static SIZE sizePhoto;
-static SIZE sizeBG;
 
 static int cxChar;
 static int cyChar;
@@ -147,38 +153,20 @@ BITMAPFILEHEADER * DibLoadImage (PTSTR pstrFileName)
 	return pbmfh ;
 }
 
-void CalcPhotoPos(SIZE bg, RECT& photo)
+void CalcElementsPos(SIZE bg)
 {
-	photo.right = (LONG)(bg.cx * 26 / 85.6);
-	photo.bottom = bg.cy * 32 / 54;
-	photo.left = (LONG)(bg.cx * 0.63);
-	photo.top = (LONG)(bg.cy * 0.115);
+	sizePhoto.cx = (LONG)(bg.cx * 26 / 85.6);
+	sizePhoto.cy = bg.cy * 32 / 54;
+	posPhoto.x = (LONG)(bg.cx * 0.63);
+	posPhoto.y = (LONG)(bg.cy * 0.115);
+
+	FontHeight = (LONG)(sizeBG.cy * 0.07);
+	posName.x = (LONG)(sizeBG.cx * 0.2);
+	posName.y = (LONG)(sizeBG.cy * 0.145);
 }
 
-//
-//   FUNCTION: InitInstance(HINSTANCE, int)
-//
-//   PURPOSE: Saves instance handle and creates main window
-//
-//   COMMENTS:
-//
-//        In this function, we save the instance handle in a global variable and
-//        create and display the main program window.
-//
-BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
+void DrawIDPicture(HWND hWnd)
 {
-	HWND hWnd;
-
-	hInst = hInstance; // Store instance handle in our global variable
-
-	hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-		CW_USEDEFAULT, 0, WND_WIDTH, WND_HEIGHT, NULL, NULL, hInstance, NULL);
-
-	if (!hWnd)
-	{
-		return FALSE;
-	}
-
 	HDC hdc;
 	//retrieves the device context (DC) for the entire window
 	hdc = GetDC(hWnd);
@@ -207,17 +195,16 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	SelectObject(hdcBG, (HGDIOBJ)hGB);
 	StretchBlt(hdcBG, 0, 0, sizeBG.cx, sizeBG.cy, hdc_origBG, 0, 0, sizeBG.cx, sizeBG.cy, MERGECOPY);
 
-	CalcPhotoPos(sizeBG, rectPhoto);
+	DeleteObject(hBGOrig);
+
+	//计算尺寸
+	CalcElementsPos(sizeBG);
 
 	HBITMAP hPhoto;
-	hPhoto = (HBITMAP)LoadImage(NULL, L"D:\\zp_yuan.bmp", IMAGE_BITMAP, rectPhoto.right, rectPhoto.bottom, LR_LOADFROMFILE);
+	hPhoto = (HBITMAP)LoadImage(NULL, L"D:\\370102198502152134.bmp", IMAGE_BITMAP, sizePhoto.cx, sizePhoto.cy, LR_LOADFROMFILE);
 	//获取长和高
 
-	GetObject(hPhoto, sizeof(bitmap), &bitmap);
-	sizePhoto.cx = bitmap.bmWidth;
-	sizePhoto.cy = bitmap.bmHeight;
 	SelectObject(hdcPhoto, (HGDIOBJ)hPhoto);
-
 
 	//创建蒙板
 	maskDC = CreateCompatibleDC(NULL);
@@ -229,7 +216,79 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	hMaskBmp2 = CreateBitmap(sizePhoto.cx, sizePhoto.cy, 1, 1, 0);
 	SelectObject(InvertMaskDC, hMaskBmp2);
 
+	COLORREF transcolor,WhiteColor;
+	BOOL ret;
+	//使用图片的左上角像素的颜色作为背景色
+	transcolor= GetPixel(hdcPhoto,1,1);
+	SetBkColor(hdcPhoto, transcolor);
+	//转换为黑白蒙板图时，背景色转换为白色，其他颜色转换为黑色
+	ret = BitBlt(maskDC, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
+	//背景色为黑色，其他颜色为白色，与上一个图片相反
+	ret = BitBlt(InvertMaskDC, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, NOTSRCCOPY);
+
+	//设置背景色为白色
+	WhiteColor = RGB(255, 255, 255);
+	SetBkColor(hdcPhoto, WhiteColor);
+	//将黑白蒙板的白色位置像素全部设置为之前设置的背景色，其他颜色进行OR操作。
+	//即将相片背景色改为白色。
+	BitBlt(hdcPhoto, 0, 0, sizePhoto.cx, sizePhoto.cy, maskDC, 0, 0, SRCPAINT);
+
+	//将反转黑白蒙板与背景图进行OR操作，即前景位置像素设置为白色，背景像素颜色不变。
+	//即头像位置像素设为白色
+	BitBlt(hdcBG, posPhoto.x, posPhoto.y, sizePhoto.cx, sizePhoto.cy, InvertMaskDC, 1, 0, SRCPAINT);
+	//将处理后的头像与背景图进行AND操作，达到背景图透明的效果。
+	BitBlt(hdcBG, posPhoto.x, posPhoto.y, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCAND);
+
+	DeleteObject(hPhoto);
+	DeleteObject(hMaskBmp);
+	DeleteObject(hMaskBmp2);
+	DeleteObject(hGB);
+
+	LOGFONT lf;
+	HFONT my_font;
+	SetBkMode (hdcBG, TRANSPARENT);
+	ZeroMemory(&lf, sizeof(LOGFONT));
+	lf.lfCharSet = GB2312_CHARSET;
+	wcscpy_s(lf.lfFaceName, L"黑体");
+	lf.lfEscapement = 0;
+	lf.lfOrientation = 0;
+	lf.lfWeight = FW_MEDIUM;
+	lf.lfHeight = -FontHeight;
+	my_font = CreateFontIndirect(&lf);
+	SelectObject(hdcBG, my_font);
+	//绘制文本
+	TextOut (hdcBG, posName.x, posName.y, L"高峰", 2) ;
+
+	DeleteObject(my_font);
+
 	ReleaseDC (hWnd, hdc) ;
+}
+
+//
+//   FUNCTION: InitInstance(HINSTANCE, int)
+//
+//   PURPOSE: Saves instance handle and creates main window
+//
+//   COMMENTS:
+//
+//        In this function, we save the instance handle in a global variable and
+//        create and display the main program window.
+//
+BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
+{
+	HWND hWnd;
+
+	hInst = hInstance; // Store instance handle in our global variable
+
+	hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+		CW_USEDEFAULT, 0, WND_WIDTH, WND_HEIGHT, NULL, NULL, hInstance, NULL);
+
+	if (!hWnd)
+	{
+		return FALSE;
+	}
+
+	DrawIDPicture(hWnd);
 
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
@@ -252,8 +311,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	int wmId, wmEvent;
 	PAINTSTRUCT ps;
 	HDC hdc;
-	BOOL ret;
-	COLORREF transcolor,WhiteColor;
 	TEXTMETRIC tm ;
 	int cx_screen, cy_screen;
 
@@ -288,31 +345,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
-		//使用图片的左上角像素的颜色作为背景色
-		transcolor= GetPixel(hdcPhoto,1,1);
-		SetBkColor(hdcPhoto, transcolor);
-		//转换为黑白蒙板图时，背景色转换为白色，其他颜色转换为黑色
-		ret = BitBlt(maskDC, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
-		//背景色为黑色，其他颜色为白色，与上一个图片相反
-		ret = BitBlt(InvertMaskDC, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, NOTSRCCOPY);
 
-		//设置背景色为白色
-		WhiteColor = RGB(255, 255, 255);
- 		SetBkColor(hdcPhoto, WhiteColor);
-		//将黑白蒙板的白色位置像素全部设置为之前设置的背景色，其他颜色进行OR操作。
-		//即将相片背景色改为白色。
-		BitBlt(hdcPhoto, 0, 0, sizePhoto.cx, sizePhoto.cy, maskDC, 0, 0, SRCPAINT);
-
-		//将反转黑白蒙板与背景图进行OR操作，即前景位置像素设置为白色，背景像素颜色不变。
- 		//即头像位置像素设为白色
-		BitBlt(hdcBG, rectPhoto.left, rectPhoto.top, sizePhoto.cx, sizePhoto.cy, InvertMaskDC, 0, 0, SRCPAINT);
-		//将处理后的头像与背景图进行AND操作，达到背景图透明的效果。
-   		BitBlt(hdcBG, rectPhoto.left, rectPhoto.top, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCAND);
 		//显示最终结果
  		BitBlt(hdc, 0, 0, sizeBG.cx, sizeBG.cy, hdcBG, 0, 0, SRCCOPY);
 		//BitBlt(hdc, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
-// 		TextOut (hdc, 0, 0, L"Hello World", 11) ;
-// 		TextOut (hdc, 0, cyChar, L"My name is Jim", 14) ;
 
 		EndPaint(hWnd, &ps);
 		break;
