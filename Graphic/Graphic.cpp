@@ -7,21 +7,6 @@
 #define WND_WIDTH 1100
 #define WND_HEIGHT 800
 
-static SIZE sizeBG;
-
-/*照片位置*/
-static SIZE sizePhoto;
-static POINT posPhoto;
-static POINT posName;
-static POINT posGender;
-static POINT posNationality;
-
-static int FontHeight;
-
-static HDC hdcPhoto;
-static HDC maskDC;
-static HDC InvertMaskDC;
-static HDC hdcBG;
 
 static int cxChar;
 static int cyChar;
@@ -153,6 +138,37 @@ BITMAPFILEHEADER * DibLoadImage (PTSTR pstrFileName)
 	return pbmfh ;
 }
 
+static SIZE sizeBG;
+
+static TCHAR Name[32];//Max 30
+static TCHAR Gender[8];
+static TCHAR Nationality[16];
+static TCHAR Year[8];
+static TCHAR Month[8];
+static TCHAR Day[8];
+static TCHAR Address[72];//MAX 70
+static TCHAR IDNum[20]; //18
+
+/*照片位置*/
+static SIZE sizePhoto;
+static POINT posPhoto;
+static POINT posName;
+static POINT posGender;
+static POINT posNationality;
+static POINT posBirthdayYear;
+static POINT posBirthdayMonth;
+static POINT posBirthdayDay;
+static POINT posAddress;
+static POINT posIDNum;
+
+static int FontHeight;
+static int AddressMaxLen;
+
+static HDC hdcPhoto;
+static HDC maskDC;
+static HDC InvertMaskDC;
+static HDC hdcBG;
+
 void CalcElementsPos(SIZE bg)
 {
 	sizePhoto.cx = (LONG)(bg.cx * 26 / 85.6);
@@ -160,9 +176,34 @@ void CalcElementsPos(SIZE bg)
 	posPhoto.x = (LONG)(bg.cx * 0.63);
 	posPhoto.y = (LONG)(bg.cy * 0.115);
 
+	//字体大小
 	FontHeight = (LONG)(sizeBG.cy * 0.07);
+	//姓名位置
 	posName.x = (LONG)(sizeBG.cx * 0.2);
 	posName.y = (LONG)(sizeBG.cy * 0.145);
+	//性别位置
+	posGender.x = (LONG)(sizeBG.cx * 0.2);
+	posGender.y = (LONG)(sizeBG.cy * 0.265);
+	//民族位置
+	posNationality.x = (LONG)(sizeBG.cx * 0.4);
+	posNationality.y = (LONG)(sizeBG.cy * 0.265);
+
+	//生日位置
+	posBirthdayYear.x = (LONG)(sizeBG.cx * 0.2);
+	posBirthdayYear.y = (LONG)(sizeBG.cy * 0.39);
+	posBirthdayMonth.x = (LONG)(sizeBG.cx * 0.345);
+	posBirthdayMonth.y = (LONG)(sizeBG.cy * 0.39);
+	posBirthdayDay.x = (LONG)(sizeBG.cx * 0.425);
+	posBirthdayDay.y = (LONG)(sizeBG.cy * 0.39);
+
+	//地址位置
+	posAddress.x = (LONG)(sizeBG.cx * 0.2);
+	posAddress.y = (LONG)(sizeBG.cy * 0.518);
+	AddressMaxLen = (LONG)(sizeBG.cx * 0.42);
+
+	//身份证号码地址
+	posIDNum.x = (LONG)(sizeBG.cx * 0.345);
+	posIDNum.y = (LONG)(sizeBG.cy * 0.825);
 }
 
 void DrawIDPicture(HWND hWnd)
@@ -175,12 +216,6 @@ void DrawIDPicture(HWND hWnd)
 	hdcBG = CreateCompatibleDC(hdc);
 	HDC hdc_origBG;
 	hdc_origBG = CreateCompatibleDC(hdc);
-	//    hBmp = (HBITMAP)LoadImage(NULL, L"D:\\cat.bmp", IMAGE_BITMAP, 0,
-	// 	   0, LR_LOADFROMFILE);
-	//    BITMAPINFO bmpInfo = {0};
-	//    bmpInfo.bmiHeader.biSize = sizeof(bmpInfo.bmiHeader);
-	//    GetDIBits(hBgd, hBmp, 0, 0, NULL, &bmpInfo, DIB_RGB_COLORS);
-	// 
 
 	BITMAP bitmap;
 
@@ -245,21 +280,64 @@ void DrawIDPicture(HWND hWnd)
 	DeleteObject(hGB);
 
 	LOGFONT lf;
-	HFONT my_font;
+	HFONT largeFont;
+	HFONT smallFont;
 	SetBkMode (hdcBG, TRANSPARENT);
 	ZeroMemory(&lf, sizeof(LOGFONT));
 	lf.lfCharSet = GB2312_CHARSET;
 	wcscpy_s(lf.lfFaceName, L"黑体");
 	lf.lfEscapement = 0;
 	lf.lfOrientation = 0;
-	lf.lfWeight = FW_MEDIUM;
+	lf.lfWeight = FW_BLACK;
 	lf.lfHeight = -FontHeight;
-	my_font = CreateFontIndirect(&lf);
-	SelectObject(hdcBG, my_font);
-	//绘制文本
-	TextOut (hdcBG, posName.x, posName.y, L"高峰", 2) ;
+	largeFont = CreateFontIndirect(&lf);
+	lf.lfHeight = -FontHeight + 7;
+	smallFont = CreateFontIndirect(&lf);
 
-	DeleteObject(my_font);
+	wcscpy_s(Name, L"高峰");
+	wcscpy_s(Gender, L"男");
+	wcscpy_s(Nationality, L"汉");
+	wcscpy_s(Year, L"1985");
+	wcscpy_s(Month, L"2");
+	wcscpy_s(Day, L"15");
+	wcscpy_s(Address, L"济南市天桥区板桥庄93-1号");
+	wcscpy_s(IDNum, L"370102198502152134");
+
+	//绘制文本
+	SelectObject(hdcBG, largeFont);
+	TextOut (hdcBG, posName.x, posName.y, Name, wcslen(Name));
+	SelectObject(hdcBG, smallFont);
+	TextOut (hdcBG, posGender.x, posGender.y, Gender, wcslen(Gender)) ;
+	TextOut (hdcBG, posNationality.x, posNationality.y, Nationality, wcslen(Nationality)) ;
+	TextOut (hdcBG, posBirthdayYear.x, posBirthdayYear.y, Year, wcslen(Year)) ;
+	TextOut (hdcBG, posBirthdayMonth.x, posBirthdayMonth.y, Month, wcslen(Month)) ;
+	TextOut (hdcBG, posBirthdayDay.x, posBirthdayDay.y, Day, wcslen(Day)) ;
+	//判断换回
+	int offset = 0;
+	int address_len = wcslen(Address);
+	TCHAR* pAddr = Address;
+	SIZE str_size;
+	while (offset < address_len)
+	{
+		GetTextExtentPoint32(hdcBG, pAddr, offset, &str_size);
+		if (str_size.cx > AddressMaxLen)
+		{
+			TextOut (hdcBG, posAddress.x, posAddress.y, pAddr, offset) ;
+			posAddress.y += (LONG)(FontHeight * 1.18);
+			pAddr += offset;
+			address_len -= offset;
+			offset = 0;
+		}
+		offset++;
+	}
+	TextOut (hdcBG, posAddress.x, posAddress.y, pAddr, address_len) ;
+
+
+	SelectObject(hdcBG, largeFont);
+	TextOut (hdcBG, posIDNum.x, posIDNum.y, IDNum, wcslen(IDNum)) ;
+
+	DeleteObject(smallFont);
+	DeleteObject(largeFont);
 
 	ReleaseDC (hWnd, hdc) ;
 }
