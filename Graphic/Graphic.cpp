@@ -3,9 +3,10 @@
 
 #include "stdafx.h"
 #include "Graphic.h"
+#include "dibfile.h"
 
-#define WND_WIDTH 1100
-#define WND_HEIGHT 800
+#define WND_WIDTH 800
+#define WND_HEIGHT 600
 
 #define PHOTO_X 600
 #define PHOTO_Y 100
@@ -73,7 +74,130 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 	return (int) msg.wParam;
 }
 
+HBITMAP CreateBitmapObjectFromDibFile (HDC hdc, PTSTR szFileName)
+{
+	BITMAPFILEHEADER * pbmfh ;
+	BOOL               bSuccess ;
+	DWORD              dwFileSize, dwHighSize, dwBytesRead ;
+	HANDLE             hFile ;
+	HBITMAP            hBitmap ;
+	PBITMAPINFOHEADER  pbih;
 
+	// Open the file: read access, prohibit write access
+	hFile = CreateFile (szFileName, GENERIC_READ, FILE_SHARE_READ, NULL, 
+		OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL) ;
+
+	if (hFile == INVALID_HANDLE_VALUE)
+		return NULL ;
+
+	// Read in the whole file
+	dwFileSize = GetFileSize (hFile, &dwHighSize) ;
+
+	if (dwHighSize)
+	{
+		CloseHandle (hFile) ;
+		return NULL ;
+	}
+
+	pbmfh = (BITMAPFILEHEADER*)malloc(dwFileSize) ;
+
+	if (!pbmfh)
+	{
+		CloseHandle (hFile) ;
+		return NULL ;
+	}
+
+	bSuccess = ReadFile (hFile, pbmfh, dwFileSize, &dwBytesRead, NULL) ;
+	CloseHandle (hFile) ;
+
+	// Verify the file
+	if (!bSuccess || (dwBytesRead != dwFileSize)         
+		|| (pbmfh->bfType != * (WORD *) "BM") 
+		|| (pbmfh->bfSize != dwFileSize))
+	{
+		free (pbmfh) ;
+		return NULL ;
+	}
+	// Create the DDB 
+	// the system uses the data pointed to by the lpbInit and lpbmi parameters to initialize the bitmap bits.
+#if 0
+	hBitmap = CreateDIBitmap (hdc,              
+		(BITMAPINFOHEADER *) (pbmfh + 1),
+		CBM_INIT,
+		(BYTE *) pbmfh + pbmfh->bfOffBits,
+		(BITMAPINFO *) (pbmfh + 1),
+		DIB_RGB_COLORS);
+#endif
+	pbih = (PBITMAPINFOHEADER)(pbmfh + 1);
+	hBitmap = CreateCompatibleBitmap(hdc, pbih->biWidth, pbih->biHeight);
+	SetDIBits(hdc, hBitmap, 0, pbih->biHeight, (BYTE*)pbmfh + pbmfh->bfOffBits, (BITMAPINFO*)(pbmfh + 1), DIB_RGB_COLORS);
+	free (pbmfh) ;
+	return hBitmap ;
+}
+
+HBITMAP CreateDibSectionFromDibFile (PTSTR szFileName)
+{
+	BITMAPFILEHEADER bmfh ;
+	BITMAPINFO     * pbmi ;
+	BYTE           * pBits ;
+	BOOL             bSuccess ;
+	DWORD            dwInfoSize, dwBytesRead ;
+	HANDLE           hFile ;
+	HBITMAP          hBitmap ;
+	// Open the file: read access, prohibit write access
+
+	hFile = CreateFile (szFileName, GENERIC_READ, FILE_SHARE_READ,
+		NULL, OPEN_EXISTING, 0, NULL) ;
+
+	if (hFile == INVALID_HANDLE_VALUE)
+		return NULL ;
+
+	// Read in the BITMAPFILEHEADER
+
+	bSuccess = ReadFile (hFile, &bmfh, sizeof (BITMAPFILEHEADER), 
+		&dwBytesRead, NULL) ;
+
+	if (!bSuccess || (dwBytesRead != sizeof (BITMAPFILEHEADER))         
+		|| (bmfh.bfType != * (WORD *) "BM"))
+	{
+		CloseHandle (hFile) ;
+		return NULL ;
+	}
+
+	// Allocate memory for the BITMAPINFO structure & read it in
+
+	dwInfoSize = bmfh.bfOffBits - sizeof (BITMAPFILEHEADER) ;
+
+	pbmi = (BITMAPINFO*)malloc (dwInfoSize) ;
+
+	bSuccess = ReadFile (hFile, pbmi, dwInfoSize, &dwBytesRead, NULL) ;
+
+	if (!bSuccess || (dwBytesRead != dwInfoSize))
+	{
+		free (pbmi) ;
+		CloseHandle (hFile) ;
+		return NULL ;
+	}
+	// Create the DIB Section
+
+	hBitmap = CreateDIBSection (NULL, pbmi, DIB_RGB_COLORS, (VOID**)&pBits, NULL, 0) ;
+
+	if (hBitmap == NULL)
+	{
+		free (pbmi) ;
+		CloseHandle (hFile) ;
+		return NULL ;
+	}
+
+	// Read in the bitmap bits
+
+	ReadFile (hFile, pBits, bmfh.bfSize - bmfh.bfOffBits, &dwBytesRead, NULL) ;
+
+	free (pbmi) ;
+	CloseHandle (hFile) ;
+
+	return hBitmap ;
+}
 
 //
 //  FUNCTION: MyRegisterClass()
@@ -109,46 +233,6 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	return RegisterClassEx(&wcex);
 }
 
-BITMAPFILEHEADER * DibLoadImage (PTSTR pstrFileName)
-{
-	BOOL               bSuccess ;
-	DWORD              dwFileSize, dwHighSize, dwBytesRead ;
-	HANDLE             hFile ;
-	BITMAPFILEHEADER * pbmfh ;
-
-	hFile = CreateFile (pstrFileName, GENERIC_READ, FILE_SHARE_READ, NULL,
-		OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL) ;
-
-	if (hFile == INVALID_HANDLE_VALUE)
-		return NULL ;
-
-	dwFileSize = GetFileSize (hFile, &dwHighSize) ;
-
-	if (dwHighSize)
-	{
-		CloseHandle (hFile) ;
-		return NULL ;
-	}
-
-	pbmfh = (BITMAPFILEHEADER*)malloc(dwFileSize);
-	if (!pbmfh)
-	{
-		CloseHandle (hFile) ;
-		return NULL ;
-	}
-
-	bSuccess = ReadFile (hFile, pbmfh, dwFileSize, &dwBytesRead, NULL) ;
-	CloseHandle (hFile) ;
-	if (!bSuccess || (dwBytesRead != dwFileSize)         
-		|| (pbmfh->bfType != * (WORD *) "BM") 
-		|| (pbmfh->bfSize != dwFileSize))
-	{
-		free (pbmfh) ;
-		return NULL ;
-	}
-	return pbmfh ;
-}
-
 //
 //   FUNCTION: InitInstance(HINSTANCE, int)
 //
@@ -181,42 +265,26 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	hdcBG = CreateCompatibleDC(hdc);
 	HDC hdc_origBG;
 	hdc_origBG = CreateCompatibleDC(hdc);
-	//    hBmp = (HBITMAP)LoadImage(NULL, L"D:\\cat.bmp", IMAGE_BITMAP, 0,
-	// 	   0, LR_LOADFROMFILE);
-	//    BITMAPINFO bmpInfo = {0};
-	//    bmpInfo.bmiHeader.biSize = sizeof(bmpInfo.bmiHeader);
-	//    GetDIBits(hBgd, hBmp, 0, 0, NULL, &bmpInfo, DIB_RGB_COLORS);
-	// 
-	HBITMAP hPhoto;
-	hPhoto = (HBITMAP)LoadImage(NULL, L"D:\\zp_green.bmp", IMAGE_BITMAP, PHOTO_CX, PHOTO_CY, LR_LOADFROMFILE);
-	//获取长和高
-	BITMAP bitmap;
-	GetObject(hPhoto, sizeof(bitmap), &bitmap);
-	sizePhoto.cx = bitmap.bmWidth;
-	sizePhoto.cy = bitmap.bmHeight;
-	SelectObject(hdcPhoto, (HGDIOBJ)hPhoto);
 
+	BITMAP bg_bitmap;
 
 	HBITMAP hBGOrig;
-	hBGOrig = (HBITMAP)LoadImage(NULL, L"D:\\A.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-	GetObject(hBGOrig, sizeof(bitmap), &bitmap);
-	sizeBG.cx = bitmap.bmWidth;
-	sizeBG.cy = bitmap.bmHeight;
-	SelectObject(hdc_origBG, (HGDIOBJ)hBGOrig);
-	HBITMAP hGB = CreateCompatibleBitmap(hdc, sizeBG.cx, sizeBG.cy);
-	SelectObject(hdcBG, (HGDIOBJ)hGB);
-	StretchBlt(hdcBG, 0, 0, sizeBG.cx, sizeBG.cy, hdc_origBG, 0, 0, sizeBG.cx, sizeBG.cy, MERGECOPY);
-
-	//创建蒙板
-	maskDC = CreateCompatibleDC(NULL);
-	InvertMaskDC = CreateCompatibleDC(NULL);
-	HBITMAP hMaskBmp;
-	hMaskBmp = CreateBitmap(sizePhoto.cx, sizePhoto.cy, 1, 1, 0);
-	SelectObject(maskDC, hMaskBmp);
-	HBITMAP hMaskBmp2;
-	hMaskBmp2 = CreateBitmap(sizePhoto.cx, sizePhoto.cy, 1, 1, 0);
-	SelectObject(InvertMaskDC, hMaskBmp2);
-
+	HBITMAP hBitmap = LoadBitmap (hInstance, TEXT ("Bricks")) ;
+	hBGOrig = (HBITMAP)LoadImage(NULL, L"D:\\htc-desire.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	GetObject(hBGOrig, sizeof(bg_bitmap), &bg_bitmap);
+	sizeBG.cx = bg_bitmap.bmWidth;
+	sizeBG.cy = bg_bitmap.bmHeight;
+	//SelectObject(hdcBG, (HGDIOBJ)hBGOrig);
+	
+	static BITMAP bitmap    = { 0, 20, 5, 4, 1, 1 } ;
+	static BYTE  bits [] = { 0x51, 0x77, 0x10, 0x00,
+		0x57, 0x77, 0x50, 0x00,
+		0x13, 0x77, 0x50, 0x00,
+		0x57, 0x77, 0x50, 0x00,
+		0x51, 0x11, 0x10, 0x00 } ;
+	bitmap.bmBits = (PSTR) bits ;
+	hBitmap = CreateBitmapIndirect (&bitmap) ;
+	SelectObject(hdcBG, (HGDIOBJ)hBitmap);
 	ReleaseDC (hWnd, hdc) ;
 
 	ShowWindow(hWnd, nCmdShow);
@@ -224,6 +292,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
 	return TRUE;
 }
+
+TCHAR szAppName[] = TEXT ("ShowDib1") ;
 
 //
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
@@ -244,6 +314,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	COLORREF transcolor,WhiteColor;
 	TEXTMETRIC tm ;
 	int cx_screen, cy_screen;
+	static HBITMAP hBitmap ;
+	BITMAP bitmap ;
+	HDC hdcMem ;
+	static BITMAPFILEHEADER * pbmfh ;
+	static BITMAPINFO       * pbmi ;
+	static BYTE             * pBits ;
+	static int                cxClient, cyClient, cxDib, cyDib ;
+	static TCHAR              szFileName [MAX_PATH], szTitleName [MAX_PATH] ;
 
 	switch (message)
 	{
@@ -255,6 +333,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		cx_screen = GetSystemMetrics(SM_CXSCREEN);
 		cy_screen = GetSystemMetrics(SM_CYSCREEN);
 		ReleaseDC (hWnd, hdc) ;
+		
+		DibFileInitialize(hWnd);
+
 		return 0 ;
 
 
@@ -270,41 +351,107 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case IDM_EXIT:
 			DestroyWindow(hWnd);
 			break;
+		case ID_FILE_OPEN:
+			// Show the File Open dialog box
+			if (!DibFileOpenDlg (hWnd, szFileName, szTitleName))
+				return 0 ;
+
+			// If there's an existing DIB, free the memory
+			if (pbmfh)
+			{
+				free (pbmfh) ;
+				pbmfh = NULL ;
+			}
+			// Load the entire DIB into memory
+			SetCursor (LoadCursor (NULL, IDC_WAIT)) ;
+			ShowCursor (TRUE) ;
+
+			//Get CompressedDIB Pointer From a BMP file.
+			pbmfh = DibLoadImage (szFileName) ;
+			ShowCursor (FALSE) ;
+			SetCursor (LoadCursor (NULL, IDC_ARROW));
+
+			//Get DDB Object from a BMP file.
+			hdc = GetDC (hWnd) ;
+			hBitmap = CreateBitmapObjectFromDibFile (hdc, szFileName) ;
+			ReleaseDC (hWnd, hdc) ;
+
+			// Invalidate the client area for later update
+			InvalidateRect (hWnd, NULL, TRUE) ;
+
+			if (pbmfh == NULL)
+			{
+				MessageBox (hWnd, TEXT ("Cannot load DIB file"), 
+					szAppName, 0) ;
+				return 0 ;
+			}
+			// Get pointers to the info structure & the bits
+			pbmi  = (BITMAPINFO *) (pbmfh + 1) ;
+			pBits = (BYTE *) pbmfh + pbmfh->bfOffBits ;
+
+			// Get the DIB width and height
+			if (pbmi->bmiHeader.biSize == sizeof (BITMAPCOREHEADER))
+			{
+				cxDib = ((BITMAPCOREHEADER *) pbmi)->bcWidth ;
+				cyDib = ((BITMAPCOREHEADER *) pbmi)->bcHeight ;
+			}
+			else
+			{
+				cxDib =      pbmi->bmiHeader.biWidth ;
+				cyDib = abs (pbmi->bmiHeader.biHeight) ;
+			}
+			return 0 ;
+			break;
+		case ID_FILE_SAVE:
+			break;
 		default:
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
 		break;
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
-		//使用图片的左上角像素的颜色作为背景色
-		transcolor= GetPixel(hdcPhoto,1,1);
-		SetBkColor(hdcPhoto, transcolor);
-		//转换为黑白蒙板图时，背景色转换为白色，其他颜色转换为黑色
-		ret = BitBlt(maskDC, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
-		//背景色为黑色，其他颜色为白色，与上一个图片相反
-		ret = BitBlt(InvertMaskDC, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, NOTSRCCOPY);
-
-		//设置背景色为白色
-		WhiteColor = RGB(255, 255, 255);
- 		SetBkColor(hdcPhoto, WhiteColor);
-		//将黑白蒙板的白色位置像素全部设置为之前设置的背景色，其他颜色进行OR操作。
-		//即将相片背景色改为白色。
-		BitBlt(hdcPhoto, 0, 0, sizePhoto.cx, sizePhoto.cy, maskDC, 0, 0, SRCPAINT);
-
-		//将反转黑白蒙板与背景图进行OR操作，即前景位置像素设置为白色，背景像素颜色不变。
- 		//即头像位置像素设为白色
-		BitBlt(hdcBG, PHOTO_X, PHOTO_Y, sizePhoto.cx, sizePhoto.cy, InvertMaskDC, 0, 0, SRCPAINT);
-		//将处理后的头像与背景图进行AND操作，达到背景图透明的效果。
-   		BitBlt(hdcBG, PHOTO_X, PHOTO_Y, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCAND);
 		//显示最终结果
- 		BitBlt(hdc, 0, 0, sizeBG.cx, sizeBG.cy, hdcBG, 0, 0, SRCCOPY);
+		BitBlt(hdc, 0, 0, 20, 20, hdcBG, 0, 0, SRCCOPY);
+		StretchBlt(hdc, 0, 0, 200, 50, hdcBG, 0, 0, 20, 5, SRCCOPY);
 		//BitBlt(hdc, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
-		TextOut (hdc, 0, 0, L"Hello World", 11) ;
-		TextOut (hdc, 0, cyChar, L"My name is Jim", 14) ;
+// 		TextOut (hdc, 0, 0, L"Hello World", 11) ;
+// 		TextOut (hdc, 0, cyChar, L"My name is Jim", 14) ;
+
+// 		if (pbmfh)
+// 		{
+// 			SetDIBitsToDevice (hdc, 
+// 			0,         // xDst
+// 			0,         // yDst
+// 			cxDib,     // cxSrc
+// 			cyDib,     // cySrc
+// 			0,         // xSrc
+// 			0,         // ySrc
+// 			0,         // first scan line
+// 			cyDib,     // number of scan lines
+// 			pBits, 
+// 			pbmi, 
+// 			DIB_RGB_COLORS);
+// 		}
+		if (hBitmap)
+		{
+			GetObject (hBitmap, sizeof (BITMAP), &bitmap) ;
+
+			hdcMem = CreateCompatibleDC (hdc) ;
+			SelectObject (hdcMem, hBitmap) ;
+
+			BitBlt (hdc,    0, 0, bitmap.bmWidth, bitmap.bmHeight, 
+				hdcMem, 0, 0, SRCCOPY) ;
+
+			DeleteDC (hdcMem) ;
+		}
 
 		EndPaint(hWnd, &ps);
 		break;
 	case WM_DESTROY:
+		if (pbmfh)
+			free (pbmfh);
+		if (hBitmap)
+			DeleteObject (hBitmap);
 		PostQuitMessage(0);
 		break;
 	default:

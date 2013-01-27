@@ -173,6 +173,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	int mouse_x, mouse_y;
 	HMENU      hMenu ;
 
+
 	switch (message)
 	{
 	case WM_CREATE:
@@ -182,6 +183,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 // 		break;
 		hMenu = GetMenu(hWnd);
 		CheckMenuItem(hMenu, ID_FUNCTION_NORMAL, MF_CHECKED);
+
 
 		//the display resolution has changed
 	case WM_DISPLAYCHANGE:
