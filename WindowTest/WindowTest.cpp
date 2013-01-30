@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include "WindowTest.h"
+#include <stdio.h>
 
 #define MAX_LOADSTRING 100
 
@@ -173,6 +174,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	int mouse_x, mouse_y;
 	HMENU      hMenu ;
 
+	HWND hwnd=NULL;
+	intptr_t handle;
+	HMENU hmenu;
 
 	switch (message)
 	{
@@ -183,7 +187,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 // 		break;
 		hMenu = GetMenu(hWnd);
 		CheckMenuItem(hMenu, ID_FUNCTION_NORMAL, MF_CHECKED);
+		AllocConsole();
+		freopen("CONIN$", "r", stdin); 
+		freopen("CONOUT$", "w", stdout); 
+		freopen("CONOUT$", "w", stderr);
+		handle= (intptr_t)GetStdHandle(STD_OUTPUT_HANDLE);
+		SetConsoleTitle(L"Debug Window");
+		SetConsoleTextAttribute((HANDLE)handle, FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
 
+		while(NULL==hwnd) hwnd=::FindWindow(NULL,L"Debug Window"); 
+		hmenu = ::GetSystemMenu ( hwnd, FALSE ); 
+		DeleteMenu ( hmenu, SC_CLOSE, MF_BYCOMMAND );
 
 		//the display resolution has changed
 	case WM_DISPLAYCHANGE:
@@ -283,6 +297,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_SYSDEADCHAR: 
 		if (DisplayMode == 1)
 		{
+			printf("KEY pressed\n");
 			// Rearrange storage array
 			for (i = cLinesMax - 1 ; i > 0 ; i--)
 			{
@@ -366,6 +381,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_DESTROY:
 		OutputDebugString(L"WM_DESTROY\n");
+		FreeConsole();
 		PostQuitMessage(0);
 		break;
 	case WM_SETFOCUS:
