@@ -173,6 +173,8 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	return RegisterClassEx(&wcex);
 }
 
+HWND hStatic;
+
 //
 //   FUNCTION: InitInstance(HINSTANCE, int)
 //
@@ -274,6 +276,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		cyChar = tm.tmHeight + tm.tmExternalLeading;
 		cx_screen = GetSystemMetrics(SM_CXSCREEN);
 		cy_screen = GetSystemMetrics(SM_CYSCREEN);
+
+		dib_obj.LoadFromFile(L"D:\\photo120613.bmp");
+		hBitmap = dib_obj.GetBitmapObject(hdc);
+
+		hStatic = CreateWindow(L"STATIC", NULL, WS_BORDER | WS_VISIBLE | WS_CHILD | SS_BITMAP,
+			100, 100, 200, 200, hWnd, (HMENU)10000, hInst, NULL);
+		SendMessage(hStatic, STM_SETIMAGE, (WPARAM)IMAGE_BITMAP, (LPARAM)hBitmap);
+
 		ReleaseDC (hWnd, hdc) ;
 
 		return 0 ;
@@ -294,16 +304,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			if (!DibFileOpenDlg (hWnd, szFileName, szTitleName))
 				return 0 ;
 
-			// Load the entire DIB into memory
 			SetCursor (LoadCursor (NULL, IDC_WAIT)) ;
 			ShowCursor (TRUE) ;
 
-			//Get CompressedDIB Pointer From a BMP file.
 			dib_obj.LoadFromFile(szFileName);
 			ShowCursor (FALSE) ;
 			SetCursor (LoadCursor (NULL, IDC_ARROW));
 
-			//Get DDB Object from a BMP file.
 			hdc = GetDC (hWnd) ;
 			hBitmap = dib_obj.GetBitmapObject(hdc) ;
 			ReleaseDC (hWnd, hdc) ;
@@ -314,7 +321,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			return 0 ;
 			break;
 		case ID_FILE_SAVE:
+			if (!DibFileOpenDlg (hWnd, szFileName, szTitleName))
+				return 0 ;
+			if (dib_obj.SaveToFile(szFileName) == TRUE)
+			{
+				MessageBox(hWnd, L"±£´æ³É¹¦", L"¹§Ï²", MB_OK);
+			}
 			break;
+		case ID_IMAGE_HFLIP:
+			dib_obj.HFlip();
+			InvalidateRect (hWnd, NULL, TRUE) ;
+			break;
+		case ID_IMAGE_VFLIP:
+			dib_obj.VFlip();
+			InvalidateRect (hWnd, NULL, TRUE) ;
+			break;
+		case ID_IMAGE_ROTATE:
+			dib_obj.Rotate();
+			InvalidateRect (hWnd, NULL, TRUE) ;
+			break;
+		case ID_IMAGE_COPY:
+			dib_obj.Copy();
 		default:
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
@@ -343,18 +370,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 // 			pbmi, 
 // 			DIB_RGB_COLORS);
 // 		}
-		if (hBitmap)
-		{
-			GetObject (hBitmap, sizeof (BITMAP), &bitmap) ;
-
-			hdcMem = CreateCompatibleDC (hdc);
-			SelectObject (hdcMem, hBitmap);
-
-			BitBlt (hdc,    0, 0, bitmap.bmWidth, bitmap.bmHeight, 
-				hdcMem, 0, 0, SRCCOPY);
-
-			DeleteDC (hdcMem);
-		}
+// 		if (hBitmap)
+// 		{
+// 			GetObject(hBitmap, sizeof (BITMAP), &bitmap);
+// 
+// 			hdcMem = CreateCompatibleDC(hdc);
+// 			SelectObject (hdcMem, hBitmap);
+// 
+// 			BitBlt(hdc, 0, 0, bitmap.bmWidth, bitmap.bmHeight, 
+// 				hdcMem, 0, 0, SRCCOPY);
+// 
+// 			DeleteDC(hdcMem);
+// 		}
+// 		dib_obj.Stretch(hdc, 100, 100, 0, 0, 0, 0, 0, 0, DIB_RGB_COLORS, SRCCOPY);
 
 		EndPaint(hWnd, &ps);
 		break;
