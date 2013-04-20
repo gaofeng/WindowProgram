@@ -77,6 +77,7 @@
     <None Include="small.ico" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="DIB.h" />
     <ClInclude Include="dibfile.h" />
     <ClInclude Include="Graphic.h" />
     <ClInclude Include="Resource.h" />
@@ -84,6 +85,7 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="DIB.cpp" />
     <ClCompile Include="dibfile.cpp" />
     <ClCompile Include="Graphic.cpp" />
     <ClCompile Include="stdafx.cpp">

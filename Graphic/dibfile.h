@@ -3,7 +3,6 @@
 
   ----------------------------------------*/
 
-void DibFileInitialize (HWND hwnd) ;
 BOOL DibFileOpenDlg (HWND hwnd, PTSTR pstrFileName, PTSTR pstrTitleName) ;
 BOOL DibFileSaveDlg (HWND hwnd, PTSTR pstrFileName, PTSTR pstrTitleName) ;
 

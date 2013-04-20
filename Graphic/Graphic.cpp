@@ -4,6 +4,7 @@
 #include "stdafx.h"
 #include "Graphic.h"
 #include "dibfile.h"
+#include "DIB.h"
 
 #define WND_WIDTH 800
 #define WND_HEIGHT 600
@@ -72,67 +73,6 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 	}
 
 	return (int) msg.wParam;
-}
-
-HBITMAP CreateBitmapObjectFromDibFile (HDC hdc, PTSTR szFileName)
-{
-	BITMAPFILEHEADER * pbmfh ;
-	BOOL               bSuccess ;
-	DWORD              dwFileSize, dwHighSize, dwBytesRead ;
-	HANDLE             hFile ;
-	HBITMAP            hBitmap ;
-	PBITMAPINFOHEADER  pbih;
-
-	// Open the file: read access, prohibit write access
-	hFile = CreateFile (szFileName, GENERIC_READ, FILE_SHARE_READ, NULL, 
-		OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL) ;
-
-	if (hFile == INVALID_HANDLE_VALUE)
-		return NULL ;
-
-	// Read in the whole file
-	dwFileSize = GetFileSize (hFile, &dwHighSize) ;
-
-	if (dwHighSize)
-	{
-		CloseHandle (hFile) ;
-		return NULL ;
-	}
-
-	pbmfh = (BITMAPFILEHEADER*)malloc(dwFileSize) ;
-
-	if (!pbmfh)
-	{
-		CloseHandle (hFile) ;
-		return NULL ;
-	}
-
-	bSuccess = ReadFile (hFile, pbmfh, dwFileSize, &dwBytesRead, NULL) ;
-	CloseHandle (hFile) ;
-
-	// Verify the file
-	if (!bSuccess || (dwBytesRead != dwFileSize)         
-		|| (pbmfh->bfType != * (WORD *) "BM") 
-		|| (pbmfh->bfSize != dwFileSize))
-	{
-		free (pbmfh) ;
-		return NULL ;
-	}
-	// Create the DDB 
-	// the system uses the data pointed to by the lpbInit and lpbmi parameters to initialize the bitmap bits.
-#if 0
-	hBitmap = CreateDIBitmap (hdc,              
-		(BITMAPINFOHEADER *) (pbmfh + 1),
-		CBM_INIT,
-		(BYTE *) pbmfh + pbmfh->bfOffBits,
-		(BITMAPINFO *) (pbmfh + 1),
-		DIB_RGB_COLORS);
-#endif
-	pbih = (PBITMAPINFOHEADER)(pbmfh + 1);
-	hBitmap = CreateCompatibleBitmap(hdc, pbih->biWidth, pbih->biHeight);
-	SetDIBits(hdc, hBitmap, 0, pbih->biHeight, (BYTE*)pbmfh + pbmfh->bfOffBits, (BITMAPINFO*)(pbmfh + 1), DIB_RGB_COLORS);
-	free (pbmfh) ;
-	return hBitmap ;
 }
 
 HBITMAP CreateDibSectionFromDibFile (PTSTR szFileName)
@@ -295,6 +235,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
 TCHAR szAppName[] = TEXT ("ShowDib1") ;
 
+CDIB dib_obj;
+
 //
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
@@ -333,12 +275,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		cx_screen = GetSystemMetrics(SM_CXSCREEN);
 		cy_screen = GetSystemMetrics(SM_CYSCREEN);
 		ReleaseDC (hWnd, hdc) ;
-		
-		DibFileInitialize(hWnd);
 
 		return 0 ;
-
-
 	case WM_COMMAND:
 		wmId    = LOWORD(wParam);
 		wmEvent = HIWORD(wParam);
@@ -356,50 +294,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			if (!DibFileOpenDlg (hWnd, szFileName, szTitleName))
 				return 0 ;
 
-			// If there's an existing DIB, free the memory
-			if (pbmfh)
-			{
-				free (pbmfh) ;
-				pbmfh = NULL ;
-			}
 			// Load the entire DIB into memory
 			SetCursor (LoadCursor (NULL, IDC_WAIT)) ;
 			ShowCursor (TRUE) ;
 
 			//Get CompressedDIB Pointer From a BMP file.
-			pbmfh = DibLoadImage (szFileName) ;
+			dib_obj.LoadFromFile(szFileName);
 			ShowCursor (FALSE) ;
 			SetCursor (LoadCursor (NULL, IDC_ARROW));
 
 			//Get DDB Object from a BMP file.
 			hdc = GetDC (hWnd) ;
-			hBitmap = CreateBitmapObjectFromDibFile (hdc, szFileName) ;
+			hBitmap = dib_obj.GetBitmapObject(hdc) ;
 			ReleaseDC (hWnd, hdc) ;
 
 			// Invalidate the client area for later update
 			InvalidateRect (hWnd, NULL, TRUE) ;
 
-			if (pbmfh == NULL)
-			{
-				MessageBox (hWnd, TEXT ("Cannot load DIB file"), 
-					szAppName, 0) ;
-				return 0 ;
-			}
-			// Get pointers to the info structure & the bits
-			pbmi  = (BITMAPINFO *) (pbmfh + 1) ;
-			pBits = (BYTE *) pbmfh + pbmfh->bfOffBits ;
-
-			// Get the DIB width and height
-			if (pbmi->bmiHeader.biSize == sizeof (BITMAPCOREHEADER))
-			{
-				cxDib = ((BITMAPCOREHEADER *) pbmi)->bcWidth ;
-				cyDib = ((BITMAPCOREHEADER *) pbmi)->bcHeight ;
-			}
-			else
-			{
-				cxDib =      pbmi->bmiHeader.biWidth ;
-				cyDib = abs (pbmi->bmiHeader.biHeight) ;
-			}
 			return 0 ;
 			break;
 		case ID_FILE_SAVE:
@@ -411,8 +322,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
 		//显示最终结果
-		BitBlt(hdc, 0, 0, 20, 20, hdcBG, 0, 0, SRCCOPY);
-		StretchBlt(hdc, 0, 0, 200, 50, hdcBG, 0, 0, 20, 5, SRCCOPY);
+// 		BitBlt(hdc, 0, 0, 20, 20, hdcBG, 0, 0, SRCCOPY);
+// 		StretchBlt(hdc, 0, 0, 200, 50, hdcBG, 0, 0, 20, 5, SRCCOPY);
 		//BitBlt(hdc, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
 // 		TextOut (hdc, 0, 0, L"Hello World", 11) ;
 // 		TextOut (hdc, 0, cyChar, L"My name is Jim", 14) ;
@@ -436,13 +347,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			GetObject (hBitmap, sizeof (BITMAP), &bitmap) ;
 
-			hdcMem = CreateCompatibleDC (hdc) ;
-			SelectObject (hdcMem, hBitmap) ;
+			hdcMem = CreateCompatibleDC (hdc);
+			SelectObject (hdcMem, hBitmap);
 
 			BitBlt (hdc,    0, 0, bitmap.bmWidth, bitmap.bmHeight, 
-				hdcMem, 0, 0, SRCCOPY) ;
+				hdcMem, 0, 0, SRCCOPY);
 
-			DeleteDC (hdcMem) ;
+			DeleteDC (hdcMem);
 		}
 
 		EndPaint(hWnd, &ps);
