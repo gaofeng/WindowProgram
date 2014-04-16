@@ -239,6 +239,11 @@ TCHAR szAppName[] = TEXT ("ShowDib1") ;
 
 CDIB dib_obj;
 
+bool painting = false;
+int x1 = 0;
+int y1 = 0;
+int x2 = 0;
+int y2 = 0;
 //
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
@@ -277,12 +282,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		cx_screen = GetSystemMetrics(SM_CXSCREEN);
 		cy_screen = GetSystemMetrics(SM_CYSCREEN);
 
-		dib_obj.LoadFromFile(L"D:\\photo120613.bmp");
+		dib_obj.LoadFromFile(L"D:\\DSC_2472.bmp");
 		hBitmap = dib_obj.GetBitmapObject(hdc);
-
-		hStatic = CreateWindow(L"STATIC", NULL, WS_BORDER | WS_VISIBLE | WS_CHILD | SS_BITMAP,
-			100, 100, 200, 200, hWnd, (HMENU)10000, hInst, NULL);
-		SendMessage(hStatic, STM_SETIMAGE, (WPARAM)IMAGE_BITMAP, (LPARAM)hBitmap);
+// 
+// 		hStatic = CreateWindow(L"STATIC", NULL, WS_BORDER | WS_VISIBLE | WS_CHILD | SS_BITMAP,
+// 			100, 100, 200, 200, hWnd, (HMENU)10000, hInst, NULL);
+// 		SendMessage(hStatic, STM_SETIMAGE, (WPARAM)IMAGE_BITMAP, (LPARAM)hBitmap);
 
 		ReleaseDC (hWnd, hdc) ;
 
@@ -311,9 +316,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			ShowCursor (FALSE) ;
 			SetCursor (LoadCursor (NULL, IDC_ARROW));
 
-			hdc = GetDC (hWnd) ;
-			hBitmap = dib_obj.GetBitmapObject(hdc) ;
-			ReleaseDC (hWnd, hdc) ;
+			hdc = GetDC (hWnd);
+			hBitmap = dib_obj.GetBitmapObject(hdc);
+			ReleaseDC (hWnd, hdc);
 
 			// Invalidate the client area for later update
 			InvalidateRect (hWnd, NULL, TRUE) ;
@@ -340,11 +345,29 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			dib_obj.Rotate();
 			InvalidateRect (hWnd, NULL, TRUE) ;
 			break;
+		case ID_IMAGE_GRAY:
+			dib_obj.Grey();
+			InvalidateRect(hWnd, NULL, TRUE);
 		case ID_IMAGE_COPY:
 			dib_obj.Copy();
 		default:
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
+		break;
+	case WM_LBUTTONDOWN:
+		painting=true;
+		x1=LOWORD(lParam);
+		y1=HIWORD(lParam);
+		InvalidateRect(hWnd, NULL ,false);
+		break;
+	case WM_MOUSEMOVE:
+		x2=LOWORD(lParam);
+		y2=HIWORD(lParam);
+
+		InvalidateRect(hWnd, NULL ,false);
+		break;
+	case WM_LBUTTONUP:
+		painting=false;
 		break;
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
@@ -370,18 +393,39 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 // 			pbmi, 
 // 			DIB_RGB_COLORS);
 // 		}
-// 		if (hBitmap)
-// 		{
-// 			GetObject(hBitmap, sizeof (BITMAP), &bitmap);
-// 
-// 			hdcMem = CreateCompatibleDC(hdc);
-// 			SelectObject (hdcMem, hBitmap);
-// 
-// 			BitBlt(hdc, 0, 0, bitmap.bmWidth, bitmap.bmHeight, 
-// 				hdcMem, 0, 0, SRCCOPY);
-// 
-// 			DeleteDC(hdcMem);
-// 		}
+		if (hBitmap)
+		{
+			DeleteObject(hBitmap);
+			hBitmap = dib_obj.GetBitmapObject(hdc);
+		}
+		if (hBitmap)
+		{
+			GetObject(hBitmap, sizeof (BITMAP), &bitmap);
+
+			hdcMem = CreateCompatibleDC(hdc);
+			SelectObject (hdcMem, hBitmap);
+
+			BitBlt(hdc, 0, 0, bitmap.bmWidth, bitmap.bmHeight, 
+				hdcMem, 0, 0, SRCCOPY);
+
+			DeleteDC(hdcMem);
+		}
+
+		if(painting)
+		{
+
+
+
+			HPEN greenPen=CreatePen(PS_DASH, 1, RGB(0,255,0));
+			SelectObject(hdc,greenPen);
+			//Rectangle(hdc, x1, y1, x2, y2);
+			MoveToEx(hdc, x1, y1, NULL);
+			LineTo(hdc, x1, y2);
+			LineTo(hdc, x2, y2);
+			LineTo(hdc, x2, y1);
+			LineTo(hdc, x1, y1);
+
+		}
 // 		dib_obj.Stretch(hdc, 100, 100, 0, 0, 0, 0, 0, 0, DIB_RGB_COLORS, SRCCOPY);
 
 		EndPaint(hWnd, &ps);
