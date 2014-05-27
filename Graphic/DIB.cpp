@@ -1,8 +1,10 @@
 #include "StdAfx.h"
+#include <string.h>
 #include "DIB.h"
+#include "ScopeGuard.hpp"
 
 // 计算图像每行象素所占的字节数目 
-#define BYTE_PER_LINE(w, c) ((((w)*(c)+31)/32)*4)
+#define BYTE_PER_LINE(width, bitCount) ((((width)*(bitCount)+31)/32)*4)
 
 CDIB::CDIB(void)
 {
@@ -69,45 +71,26 @@ BOOL CDIB::LoadFromFile( LPCTSTR filename )
 	{
 		return FALSE;
 	}
+	ON_SCOPE_EXIT([&]{CloseHandle(hFile);});
 	//获取文件大小
 	dwFileSize = GetFileSize(hFile, &dwHighSize) ;
 	if (dwHighSize)
 	{
-		CloseHandle (hFile) ;
 		return FALSE;
 	}
-	BITMAPFILEHEADER* pbmfh = (BITMAPFILEHEADER*)malloc(sizeof(BITMAPFILEHEADER));
-	if (!pbmfh)
-	{
-		CloseHandle(hFile);
-		return FALSE;
-	}
-	bSuccess = ReadFile (hFile, pbmfh, sizeof(BITMAPFILEHEADER), &dwBytesRead, NULL);
+	BITMAPFILEHEADER pbmfh;
+	bSuccess = ReadFile (hFile, &pbmfh, sizeof(BITMAPFILEHEADER), &dwBytesRead, NULL);
 
 	if (!bSuccess || (dwBytesRead != sizeof(BITMAPFILEHEADER))         
-		|| (pbmfh->bfType != * (WORD *) "BM") 
-		|| (pbmfh->bfSize != dwFileSize))
+		|| (pbmfh.bfType != * (WORD *) "BM") 
+		|| (pbmfh.bfSize != dwFileSize))
 	{
-		free(pbmfh);
-		pbmfh = NULL;
 		return FALSE;
 	}
 	m_pbmih = (BITMAPINFOHEADER*)malloc(sizeof(BITMAPINFOHEADER));
-	if (!m_pbmih)
-	{
-		free(pbmfh);
-		pbmfh = NULL;
-		CloseHandle(hFile);
-		return FALSE;
-	}
 	bSuccess = ReadFile(hFile, m_pbmih, sizeof(BITMAPINFOHEADER), &dwBytesRead, NULL);
 	if (!bSuccess || (dwBytesRead != sizeof(BITMAPINFOHEADER)))
 	{
-		free(pbmfh);
-		pbmfh = NULL;
-		free(m_pbmih);
-		m_pbmih = NULL;
-		CloseHandle(hFile);
 		return FALSE;
 	}
 	nWidth = m_pbmih->biWidth;
@@ -124,16 +107,11 @@ BOOL CDIB::LoadFromFile( LPCTSTR filename )
 	m_lpPalette = NULL;
 
 	//移动指针
-	myFileSeek(hFile, pbmfh->bfOffBits, FILE_BEGIN);
+	myFileSeek(hFile, pbmfh.bfOffBits, FILE_BEGIN);
 	// 重新为位图象素数据分配内存
 	m_lpBits= (BYTE*)malloc(nByteWidth * nHeight);
 	if (!m_lpBits)
 	{
-		free(pbmfh);
-		pbmfh = NULL;
-		free(m_pbmih);
-		m_pbmih = NULL;
-		CloseHandle(hFile);
 		return FALSE;
 	}
 	memset(m_lpBits, 0x00, nByteWidth * nHeight);
@@ -143,11 +121,6 @@ BOOL CDIB::LoadFromFile( LPCTSTR filename )
 	{
 		free(m_lpBits);
 		m_lpBits = NULL;
-		free(pbmfh);
-		pbmfh = NULL;
-		free(m_pbmih);
-		m_pbmih = NULL;
-		CloseHandle(hFile);
 		return FALSE;
 	}
 
@@ -165,7 +138,7 @@ BOOL CDIB::LoadFromFile( LPCTSTR filename )
 		m_PaletterSize = (1 << m_pbmih->biBitCount);
 		// 如果pInfo->biClrUsed不等于0，
 		// 使用pInfo->biClrUsed指定的位图实际使用的颜色数
-		if (m_pbmih->biClrUsed!=0 && m_pbmih->biClrUsed < m_PaletterSize)
+		if ((m_pbmih->biClrUsed != 0) && (m_pbmih->biClrUsed < m_PaletterSize))
 		{
 			m_PaletterSize = m_pbmih->biClrUsed;
 		}
@@ -174,10 +147,20 @@ BOOL CDIB::LoadFromFile( LPCTSTR filename )
 
 		// 为保存调色板信息数据的m_lpPalette分配空间
 		m_lpPalette = (BYTE*)malloc(sizeof(RGBQUAD) * m_PaletterSize);
-		ReadFile(hFile, m_lpPalette, sizeof(RGBQUAD) * m_PaletterSize, &dwBytesRead, NULL);
+		bSuccess = ReadFile(hFile, m_lpPalette, sizeof(RGBQUAD) * m_PaletterSize, &dwBytesRead, NULL);
+		if (!bSuccess || (dwBytesRead != (sizeof(RGBQUAD) * m_PaletterSize)))
+		{
+			free(m_lpPalette);
+			m_lpPalette = NULL;
+			free(m_lpBits);
+			m_lpBits = NULL;
+			return FALSE;
+		}
 		break;
 		// 其它情况，不予处理
 	default:
+		free(m_lpBits);
+		m_lpBits = NULL;
 		return FALSE;
 	}
 
@@ -187,7 +170,6 @@ BOOL CDIB::LoadFromFile( LPCTSTR filename )
 	m_nWidth = nWidth;
 	// 记录位图表示颜色所用的位数
 	m_nHeight = nHeight;
-	CloseHandle(hFile);
 
 	return TRUE;
 }
@@ -205,29 +187,28 @@ BOOL CDIB::SaveToFile(LPCTSTR filename)
 		CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL) ;
 
 	if (hFile == INVALID_HANDLE_VALUE)
+	{
 		return FALSE ;
-
+		}
 	// 获取图像文件中每行图像所占字节数
 	int nByteWidth = BYTE_PER_LINE(m_nWidth, m_nBitCount);
 
 	// 填充位图文件头结构，指定文件相关信息
-	BITMAPFILEHEADER bm;
+	BITMAPFILEHEADER bmfh;
 
 	// 指定文件类型为位图
-	bm.bfType = 'M'*256+'B';
+	bmfh.bfType = 'M'*256+'B';
 	// 指定位图文件的大小
-	bm.bfSize = nByteWidth*m_nHeight;
+	bmfh.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + 
+		m_PaletterSize * sizeof(RGBQUAD) + nByteWidth * m_nHeight;
 	// 保留的结构元素，必须为0
-	bm.bfReserved1 = 0;
-	bm.bfReserved2 = 0;
+	bmfh.bfReserved1 = 0;
+	bmfh.bfReserved2 = 0;
 	// 计算从文件头开始到实际的图象数据之间的偏移量（字节数）
-	bm.bfOffBits = sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);
-	// 如果不是24位真彩色位图，加上调色板信息的长度
-	if (m_nBitCount != 24)
-		bm.bfOffBits += m_PaletterSize * sizeof(RGBQUAD);
+	bmfh.bfOffBits = sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER) + m_PaletterSize * sizeof(RGBQUAD);
 
 	// 在文件中写入位图文件头信息
-	WriteFile(hFile, &bm, sizeof(BITMAPFILEHEADER), &dwBytesWritten, NULL);
+	WriteFile(hFile, &bmfh, sizeof(BITMAPFILEHEADER), &dwBytesWritten, NULL);
 
 	// 填充位图信息头结构，指定位图的大小和颜色信息
 	BITMAPINFOHEADER bmi;
@@ -246,7 +227,7 @@ BOOL CDIB::SaveToFile(LPCTSTR filename)
 	bmi.biCompression = BI_RGB;
 	// 指定实际的位图数据占用的字节数，
 	// 当用BI_RGB格式时，可设置为0 
-	bmi.biSizeImage = 0;
+	bmi.biSizeImage = nByteWidth * m_nHeight;
 	// 指定目标设备的水平分辨率，用象素/米表示
 	bmi.biXPelsPerMeter = 0;
 	// 指定目标设备的垂直分辨率，用象素/米表示
@@ -259,7 +240,7 @@ BOOL CDIB::SaveToFile(LPCTSTR filename)
 	WriteFile(hFile, &bmi,sizeof(BITMAPINFOHEADER), &dwBytesWritten, NULL);
 
 	// 如果不是24位真彩色位图，将调色板信息写入文件
-	if (m_nBitCount!=24)
+	if (m_nBitCount != 24)
 		WriteFile(hFile, m_lpPalette, m_PaletterSize * sizeof(RGBQUAD), &dwBytesWritten, NULL);
 
 	// 将位图数据写入文件
@@ -269,6 +250,7 @@ BOOL CDIB::SaveToFile(LPCTSTR filename)
 	return TRUE;
 }
 
+/*得到的BITMAP对象需自行释放*/
 HBITMAP CDIB::GetBitmapObject(HDC hdc)
 {
 	HBITMAP hBitmap = NULL;
@@ -452,35 +434,51 @@ BOOL CDIB::Copy()
 BOOL CDIB::Grey()
 {
 	// 如果没有位图数据，返回
-	if (!m_lpBits) 
+	if (!m_lpBits)
+	{
 		return FALSE;
-
+	}
 	int y, x, nByteWidth, grey;
-	BYTE *p;
+	int i;
+	BYTE *p = NULL;
+	BYTE* gray_bits = NULL;
 
 	// 如果是24位真彩色的位图
 	if (m_nBitCount==24)
 	{
+		gray_bits = (BYTE*)malloc(m_nWidth * m_nHeight);
+		//转换为灰阶图像
 		// 计算位图每行象素所占的字节数目
 		nByteWidth = BYTE_PER_LINE(m_nWidth, m_nBitCount);
 		// 对于位图中的每一行
-		for (y=0; y<m_nHeight; y++)
+		for (y = 0; y < m_nHeight; y++)
+		{
 			// 对于每一行中的每一个象素
-				for (x=0; x<m_nWidth; x++)
-				{
-					// 找到该象素在象素数据数组中的位置
-					// 24位真彩色位图中，每个象素占3个字节
-					p = m_lpBits+nByteWidth*y+x*3;
-
-					// 修改象素的颜色，使其灰度化
-					grey = (BYTE)(0.299*p[2]+0.587*p[1]+0.114*p[0]);
-					p[0] = grey;
-					p[1] = grey;
-					p[2] = grey;
-				}
+			for (x = 0; x < m_nWidth; x++)
+			{
+				// 找到该象素在象素数据数组中的位置
+				// 24位真彩色位图中，每个象素占3个字节
+				p = m_lpBits + nByteWidth * y + x * 3;
+				// 修改象素的颜色，使其灰度化
+				gray_bits[y * m_nWidth + x] = (BYTE)(0.299*p[2]+0.587*p[1]+0.114*p[0]);
+			}
+		}
+		free(m_lpBits);
+		m_lpBits = gray_bits;
+		m_nBitCount = 8;
+		m_pbmih->biBitCount = 8;
+		m_PaletterSize = 256;
+		m_lpPalette = (BYTE*)malloc(sizeof(RGBQUAD) * m_PaletterSize);
+		for (i = 0; i < m_PaletterSize; i++)
+		{
+			m_lpPalette[i * 4 + 0] = i;
+			m_lpPalette[i * 4 + 1] = i;
+			m_lpPalette[i * 4 + 2] = i;
+			m_lpPalette[i * 4 + 3] = 0;
+		}
 	}
-	// 如果不是24位真彩色位图，修改调色板中的颜色
-	else
+	// 如果不是24位真彩色位图，也不是8位灰阶图像，修改调色板中的颜色
+	else if (m_nBitCount != 8)
 	{
 		// 对于调色板中的每一种颜色
 		for (x = 0; x < m_PaletterSize; x++)
@@ -631,9 +629,9 @@ BOOL CDIB::Rotate()
 			for (x=0; x<m_nWidth; x++)
 			{
 				// 取第y行的第x个象素
-				p1 = m_lpBits+bw1*y+x*3;
+				p1 = m_lpBits+bw1 * y + x * 3;
 				// 取得旋转后所对应的象素
-				p2 = pbits+bw2*(h2-x-1)+y*3;
+				p2 = pbits + bw2 * (h2 - x - 1) + y * 3;
 				// 将旋转前的象素数据复制给旋转后的象素
 				p2[0] = p1[0];
 				p2[1] = p1[1];
@@ -684,6 +682,9 @@ BOOL CDIB::Rotate()
 	m_nWidth = w2;
 	// 将m_nHeight设置为旋转后的位图高度
 	m_nHeight = h2;
+	//更新位图头结构体
+	m_pbmih->biWidth = m_nWidth;
+	m_pbmih->biHeight = m_nHeight;
 
 	return TRUE;
 }

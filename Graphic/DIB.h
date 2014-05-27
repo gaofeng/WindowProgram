@@ -8,9 +8,9 @@ private:
 	int m_nHeight;		// 图象的高度，单位是象素
 	int m_nBitCount;	// 图像中表示每像素所用的位数
 	BITMAPINFOHEADER* m_pbmih;
-	BYTE *m_lpPalette;	// 调色板指针
+	BYTE* m_lpPalette;	// 调色板指针
 	DWORD m_PaletterSize; // 调色板大小
-	BYTE *m_lpBits;		// 图象数据指针
+	BYTE* m_lpBits;		// 图象数据指针
 public:
 	CDIB(void);
 	~CDIB(void);
