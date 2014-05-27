@@ -254,6 +254,10 @@ BOOL CDIB::SaveToFile(LPCTSTR filename)
 HBITMAP CDIB::GetBitmapObject(HDC hdc)
 {
 	HBITMAP hBitmap = NULL;
+	if (m_pbmih == NULL)
+	{
+		return NULL;
+	}
 	hBitmap = CreateCompatibleBitmap(hdc, m_nWidth, m_nHeight);
 	BITMAPINFO* pbmi = (BITMAPINFO*)malloc(sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * m_PaletterSize);
 	pbmi->bmiHeader = *m_pbmih;
