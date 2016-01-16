@@ -1,7 +1,7 @@
+#include "StdAfx.h"
 #include <string.h>
 #include "DIB.h"
 #include "ScopeGuard.hpp"
-
 
 // 计算图像每行象素所占的字节数目 
 #define BYTE_PER_LINE(width, bitCount) ((((width)*(bitCount)+31)/32)*4)
@@ -79,27 +79,25 @@ BOOL CDIB::LoadFromFile( LPCTSTR filename )
 	{
 		return FALSE;
 	}
-	//读取文件信息头
 	BITMAPFILEHEADER pbmfh;
 	bSuccess = ReadFile (hFile, &pbmfh, sizeof(BITMAPFILEHEADER), &dwBytesRead, NULL);
 
-	if (!bSuccess || (dwBytesRead != sizeof(BITMAPFILEHEADER)) ||
-		(pbmfh.bfType != *(WORD *) "BM") ||
-		(pbmfh.bfSize != dwFileSize))
+	if (!bSuccess || (dwBytesRead != sizeof(BITMAPFILEHEADER))         
+		|| (pbmfh.bfType != * (WORD *) "BM") 
+		|| (pbmfh.bfSize != dwFileSize))
 	{
 		return FALSE;
 	}
-	// 读取位图信息头
-	BITMAPINFOHEADER bmih;
-	bSuccess = ReadFile(hFile, &bmih, sizeof(BITMAPINFOHEADER), &dwBytesRead, NULL);
+	m_pbmih = (BITMAPINFOHEADER*)malloc(sizeof(BITMAPINFOHEADER));
+	bSuccess = ReadFile(hFile, m_pbmih, sizeof(BITMAPINFOHEADER), &dwBytesRead, NULL);
 	if (!bSuccess || (dwBytesRead != sizeof(BITMAPINFOHEADER)))
 	{
 		return FALSE;
 	}
 	// 得到图像基本信息
-	nWidth = bmih.biWidth;
-	nHeight = bmih.biHeight;
-	nBitCount = bmih.biBitCount;
+	nWidth = m_pbmih->biWidth;
+	nHeight = m_pbmih->biHeight;
+	nBitCount = m_pbmih->biBitCount;
 	nByteWidth = BYTE_PER_LINE(nWidth, nBitCount);
 
 	if (nHeight < 0)
@@ -276,20 +274,15 @@ BOOL CDIB::LoadFromMem(BYTE* data_buf, int data_len)
 	{
 		// 如果pInfo->biClrUsed不等于0，
 		// 使用pInfo->biClrUsed指定的位图实际使用的颜色数
-		if ((bmih->biClrUsed != 0) && (bmih->biClrUsed < nPaletterSize))
+		if ((m_pbmih->biClrUsed != 0) && (m_pbmih->biClrUsed < m_PaletterSize))
+		{
+			m_PaletterSize = m_pbmih->biClrUsed;
 		{
 			nPaletterSize = bmih->biClrUsed;
 		}
 
 		// 为保存调色板信息数据的m_lpPalette分配空间
-		m_lpPalette = (BYTE*)malloc(sizeof(RGBQUAD)* nPaletterSize);
-		if (m_lpPalette == NULL)
-		{
-			return FALSE;
-		}
-		memcpy(m_lpPalette,
-			data_buf + sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER),
-			sizeof(RGBQUAD)* nPaletterSize);
+		m_lpPalette = (BYTE*)malloc(sizeof(RGBQUAD) * m_PaletterSize);
 	}
 
 	m_lpBits = new BYTE[nByteWidth * nHeight];
@@ -360,6 +353,32 @@ BOOL CDIB::SaveToFile(LPCTSTR filename)
 	// 在文件中写入位图文件头信息
 	WriteFile(hFile, &bmfh, sizeof(BITMAPFILEHEADER), &dwBytesWritten, NULL);
 
+	// 填充位图信息头结构，指定位图的大小和颜色信息
+	BITMAPINFOHEADER bmi;
+	// 指定位图信息头结构的大小
+	bmi.biSize = sizeof(BITMAPINFOHEADER);
+	// 指定位图的宽度
+	bmi.biWidth = m_nWidth;
+	// 指定位图的高度
+	bmi.biHeight = m_nHeight;
+	// 目标设备的位面数，其值总设为1
+	bmi.biPlanes = 1;
+	// 指定表示颜色时用到的位数，
+	// 常用的值为1(黑白二色图)、4(16色图)、8(256色图)、24(真彩色图)
+	bmi.biBitCount = m_nBitCount;
+	// 说明没有压缩图像数据
+	bmi.biCompression = BI_RGB;
+	// 指定实际的位图数据占用的字节数，
+	// 当用BI_RGB格式时，可设置为0 
+	bmi.biSizeImage = nByteWidth * m_nHeight;
+	// 指定目标设备的水平分辨率，用象素/米表示
+	bmi.biXPelsPerMeter = 0;
+	// 指定目标设备的垂直分辨率，用象素/米表示
+	bmi.biYPelsPerMeter = 0;
+	// 指定位图实际使用的彩色表中的颜色索引数（设为0的话，则说明使用所有调色板项）
+	bmi.biClrUsed = 0;
+	// 指定对图像显示有重要影响的颜色索引的数目，如果是0，表示都重要。
+	bmi.biClrImportant = 0;
 	// 将位图信息头写入文件
 	WriteFile(hFile, m_pbmih, sizeof(BITMAPINFOHEADER), &dwBytesWritten, NULL);
 
