@@ -5,6 +5,10 @@
 #include "Graphic.h"
 #include "dibfile.h"
 #include "DIB.h"
+#include <windows.h>
+#include <string>
+
+using namespace std;
 
 #define WND_WIDTH 800
 #define WND_HEIGHT 600
@@ -212,7 +216,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
 	HBITMAP hBGOrig;
 	HBITMAP hBitmap = LoadBitmap (hInstance, TEXT ("Bricks")) ;
-	hBGOrig = (HBITMAP)LoadImage(NULL, L"D:\\htc-desire.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+	hBGOrig = (HBITMAP)LoadImage(NULL, "D:\\htc-desire.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
 	GetObject(hBGOrig, sizeof(bg_bitmap), &bg_bitmap);
 	sizeBG.cx = bg_bitmap.bmWidth;
 	sizeBG.cy = bg_bitmap.bmHeight;
@@ -239,11 +243,96 @@ TCHAR szAppName[] = TEXT ("ShowDib1") ;
 
 CDIB dib_obj;
 
-bool painting = false;
-int x1 = 0;
-int y1 = 0;
-int x2 = 0;
-int y2 = 0;
+BOOL WriteBitmapToBmpFile(string dest_path, BYTE* bits_buf, int buf_len, 
+	int width, int height, int bitCount )
+{
+	DWORD dwPaletteSize = 0;
+
+	switch (bitCount)
+	{
+	case 1:
+		dwPaletteSize = 2;
+		break;
+	case 8:
+		dwPaletteSize = 256;
+		break;
+	case 24:
+		break;
+	default:
+		//Not going to work!
+		return FALSE;
+	}
+
+	BITMAPINFOHEADER bmih;
+	bmih.biSize = sizeof(BITMAPINFOHEADER);
+	bmih.biWidth = width;
+	bmih.biHeight = height;
+	bmih.biPlanes = 1;
+	bmih.biBitCount = (unsigned short)bitCount;
+	bmih.biCompression = BI_RGB;
+	bmih.biSizeImage = buf_len;
+	bmih.biXPelsPerMeter = 0;
+	bmih.biYPelsPerMeter = 0;
+	bmih.biClrUsed = 0;
+	bmih.biClrImportant = 0;
+
+	BITMAPFILEHEADER bmfh = { 0 };
+	bmfh.bfType = ((WORD)('M' << 8) | 'B');
+	bmfh.bfSize = buf_len + sizeof(BITMAPINFOHEADER) + sizeof(BITMAPFILEHEADER) + (sizeof(RGBQUAD)*dwPaletteSize);
+	bmfh.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + (sizeof(RGBQUAD)*dwPaletteSize);
+
+	HANDLE hFile;
+
+	hFile = CreateFile(dest_path.c_str(), GENERIC_WRITE, 0, NULL,
+		CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if (hFile == INVALID_HANDLE_VALUE)
+		return FALSE;
+
+	DWORD dwBytesWritten;
+	BOOL   bSuccess;
+	bSuccess = WriteFile(hFile, &bmfh, sizeof(BITMAPFILEHEADER), &dwBytesWritten, NULL);
+	bSuccess = WriteFile(hFile, &bmih, bmih.biSize, &dwBytesWritten, NULL);
+
+	BYTE (*PaletteArray)[sizeof(RGBQUAD)] = new BYTE[dwPaletteSize][sizeof(RGBQUAD)];
+	for (DWORD i = 0; i < dwPaletteSize; i++)
+	{
+		memset(PaletteArray[i], i, 3);
+		PaletteArray[i][3] = 0x00;
+	}
+	bSuccess = WriteFile(hFile, PaletteArray, sizeof(RGBQUAD)*dwPaletteSize, &dwBytesWritten, NULL);
+// 	BitmapFlipVertical(bits_buf, width, height, bitCount);
+
+	bSuccess = WriteFile(hFile, bits_buf, buf_len, &dwBytesWritten, NULL);
+	CloseHandle(hFile);
+	return TRUE;
+}
+
+void HBITMAPToFile(HDC hdc, HBITMAP hBitmap)
+{
+	BITMAPINFO* bif = (BITMAPINFO*)malloc(sizeof(BITMAPINFO) + 256 * sizeof(RGBQUAD));
+	memset(bif, 0x00, sizeof(BITMAPINFO) + 256 * sizeof(RGBQUAD));
+	for (int i = 0; i < 256; i++)
+	{
+		bif->bmiColors[i].rgbBlue = i;
+		bif->bmiColors[i].rgbGreen = i;
+		bif->bmiColors[i].rgbRed = i;
+		bif->bmiColors[i].rgbReserved = 0x00;
+	}
+	BITMAP bitmap;
+	::GetObject(hBitmap, sizeof(BITMAP), &bitmap);
+	bif->bmiHeader.biSize = sizeof(bif->bmiHeader);
+	::GetDIBits(hdc, hBitmap, 0, bitmap.bmHeight, NULL, bif, DIB_RGB_COLORS);
+	bif->bmiHeader.biBitCount = (WORD)8;
+	bif->bmiHeader.biCompression = BI_RGB;
+	bif->bmiHeader.biClrUsed = 256;
+	bif->bmiHeader.biClrImportant = 256;
+	BYTE* dst_data = (BYTE*)malloc(1000000);
+	int scan_lines = ::GetDIBits(hdc, hBitmap, 0, bitmap.bmHeight, dst_data, bif, DIB_RGB_COLORS);
+	WriteBitmapToBmpFile("D:\\small_test.bmp", dst_data, bif->bmiHeader.biSizeImage, bif->bmiHeader.biWidth, bif->bmiHeader.biHeight, 8);
+	free(bif);
+}
+
 //
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
@@ -260,7 +349,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	PAINTSTRUCT ps;
 	HDC hdc;
 	BOOL ret;
-	COLORREF transcolor,WhiteColor;
+// 	COLORREF transcolor,WhiteColor;
 	TEXTMETRIC tm ;
 	int cx_screen, cy_screen;
 	static HBITMAP hBitmap ;
@@ -271,6 +360,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	static BYTE             * pBits ;
 	static int                cxClient, cyClient, cxDib, cyDib ;
 	static TCHAR              szFileName [MAX_PATH], szTitleName [MAX_PATH] ;
+	static HDC hdcMem2;
+	int dest_width = 328;
+	int dest_height = 356;
+	static HBITMAP hBitmap2;
+
+	HFONT hFont, hFontOld;
+	char *str="210803197511303518";
+	int  width, height;
+
+	HBITMAP hImage;
 
 	switch (message)
 	{
@@ -282,9 +381,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		cx_screen = GetSystemMetrics(SM_CXSCREEN);
 		cy_screen = GetSystemMetrics(SM_CYSCREEN);
 
-		dib_obj.LoadFromFile(L"D:\\DSC_2472.bmp");
+		dib_obj.LoadFromFile("D:\\cat.bmp");
 		hBitmap = dib_obj.GetBitmapObject(hdc);
-// 
+
 // 		hStatic = CreateWindow(L"STATIC", NULL, WS_BORDER | WS_VISIBLE | WS_CHILD | SS_BITMAP,
 // 			100, 100, 200, 200, hWnd, (HMENU)10000, hInst, NULL);
 // 		SendMessage(hStatic, STM_SETIMAGE, (WPARAM)IMAGE_BITMAP, (LPARAM)hBitmap);
@@ -316,21 +415,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			ShowCursor (FALSE) ;
 			SetCursor (LoadCursor (NULL, IDC_ARROW));
 
-			hdc = GetDC (hWnd);
-			hBitmap = dib_obj.GetBitmapObject(hdc);
-			ReleaseDC (hWnd, hdc);
-
 			// Invalidate the client area for later update
 			InvalidateRect (hWnd, NULL, TRUE) ;
 
 			return 0 ;
 			break;
 		case ID_FILE_SAVE:
+			HBITMAPToFile(hdcMem2, hBitmap2);
 			if (!DibFileOpenDlg (hWnd, szFileName, szTitleName))
 				return 0 ;
+// 			strcpy(szFileName, "D:\\Graphic.bmp");
 			if (dib_obj.SaveToFile(szFileName) == TRUE)
 			{
-				MessageBox(hWnd, L"保存成功", L"恭喜", MB_OK);
+				MessageBox(hWnd, "保存成功", "恭喜", MB_OK);
 			}
 			break;
 		case ID_IMAGE_HFLIP:
@@ -345,29 +442,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			dib_obj.Rotate();
 			InvalidateRect (hWnd, NULL, TRUE) ;
 			break;
-		case ID_IMAGE_GRAY:
-			dib_obj.Grey();
-			InvalidateRect(hWnd, NULL, TRUE);
 		case ID_IMAGE_COPY:
 			dib_obj.Copy();
+		case ID_IMAGE_GRAY:
+			dib_obj.Gray();
+			InvalidateRect (hWnd, NULL, TRUE) ;
 		default:
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
-		break;
-	case WM_LBUTTONDOWN:
-		painting=true;
-		x1=LOWORD(lParam);
-		y1=HIWORD(lParam);
-		InvalidateRect(hWnd, NULL ,false);
-		break;
-	case WM_MOUSEMOVE:
-		x2=LOWORD(lParam);
-		y2=HIWORD(lParam);
-
-		InvalidateRect(hWnd, NULL ,false);
-		break;
-	case WM_LBUTTONUP:
-		painting=false;
 		break;
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
@@ -375,9 +457,47 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 // 		BitBlt(hdc, 0, 0, 20, 20, hdcBG, 0, 0, SRCCOPY);
 // 		StretchBlt(hdc, 0, 0, 200, 50, hdcBG, 0, 0, 20, 5, SRCCOPY);
 		//BitBlt(hdc, 0, 0, sizePhoto.cx, sizePhoto.cy, hdcPhoto, 0, 0, SRCCOPY);
-// 		TextOut (hdc, 0, 0, L"Hello World", 11) ;
+// 		::TextOut (hdc, 0, 0, "Hello World", 11) ;
 // 		TextOut (hdc, 0, cyChar, L"My name is Jim", 14) ;
+		RECT rc;
+// 		hdc = BeginPaint(hWnd, &ps);
+// 		GetClientRect(hWnd, &rc);
+// 		SetBkMode(hdc, TRANSPARENT);
 
+// 		width = (rc.right - 20) / (int)strlen(str);
+// 		height = rc.bottom - 20;
+// 		height = -MulDiv(12, GetDeviceCaps(hdc, LOGPIXELSY), 72);
+// 		hFont = CreateFont(
+// 			height,      //字体的逻辑高度
+// 			-height / 2,       //逻辑平均字符宽度
+// 			0,           //与水平线的角度
+// 			0,           //基线方位角度
+// 			FW_HEAVY,  //字形：常规
+// 			FALSE,       //字形：斜体
+// 			FALSE,       //字形：下划线
+// 			FALSE,       //字形：删除线
+// 			GB2312_CHARSET,          //字符集
+// 			OUT_DEFAULT_PRECIS,      //输出精度
+// 			CLIP_DEFAULT_PRECIS,     //剪截精度
+// 			DEFAULT_QUALITY,           //输出品质
+// 			DEFAULT_PITCH | FF_SCRIPT, //倾斜度
+// 			"宋体"                   //字体
+// 			);
+// 		hFontOld = (HFONT)SelectObject(hdc, hFont);       //选择字体
+// 		SetTextColor(hdc, 0xC0C0C0);
+// 		TextOut(hdc, 10, 10, str, (int)strlen(str));
+// 		SelectObject(hdc, hFontOld);                      //选择旧字体
+// 		DeleteObject(hFont);                              //删除新字体
+// 		hImage = (HBITMAP)LoadImage(NULL, "D:\\372324198312121020.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+// 		hdcMem = CreateCompatibleDC(hdc);
+// 		GetObject(hImage, sizeof (BITMAP), &bitmap);
+// 		SelectObject (hdcMem, hImage);
+// 		SetStretchBltMode(hdc, HALFTONE);
+// 		StretchBlt(hdc, 100, 200, 300, 300, hdcMem, 0, 0, bitmap.bmWidth, bitmap.bmHeight, SRCCOPY);
+// 
+//  		DeleteDC(hdcMem);
+// 		DeleteObject(hImage);
+// 
 // 		if (pbmfh)
 // 		{
 // 			SetDIBitsToDevice (hdc, 
@@ -393,11 +513,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 // 			pbmi, 
 // 			DIB_RGB_COLORS);
 // 		}
-		if (hBitmap)
-		{
-			DeleteObject(hBitmap);
-			hBitmap = dib_obj.GetBitmapObject(hdc);
-		}
+		hBitmap = dib_obj.GetBitmapObject(hdc) ;
 		if (hBitmap)
 		{
 			GetObject(hBitmap, sizeof (BITMAP), &bitmap);
@@ -405,26 +521,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			hdcMem = CreateCompatibleDC(hdc);
 			SelectObject (hdcMem, hBitmap);
 
+// 			hdcMem2 = ::CreateCompatibleDC(hdc);
+// 
+// 			hBitmap2 = ::CreateCompatibleBitmap(hdc, dest_width, dest_height);
+// 			::SelectObject(hdcMem2, hBitmap2);
+// 			::SetStretchBltMode(hdcMem2, HALFTONE);//HALFTONE,COLORONCOLOR
+// 			SetBrushOrgEx(hdcMem2, 0, 0, NULL);
+// 			ret = ::StretchBlt(hdcMem2, 0, 0, dest_width, dest_height, 
+// 				hdcMem, 0, 0, bitmap.bmWidth, bitmap.bmHeight, SRCCOPY);
+// 
+// 			BitBlt(hdc, 0, 0, dest_width, dest_height, 
+// 				hdcMem2, 0, 0, SRCCOPY);
 			BitBlt(hdc, 0, 0, bitmap.bmWidth, bitmap.bmHeight, 
 				hdcMem, 0, 0, SRCCOPY);
 
 			DeleteDC(hdcMem);
-		}
-
-		if(painting)
-		{
-
-
-
-			HPEN greenPen=CreatePen(PS_DASH, 1, RGB(0,255,0));
-			SelectObject(hdc,greenPen);
-			//Rectangle(hdc, x1, y1, x2, y2);
-			MoveToEx(hdc, x1, y1, NULL);
-			LineTo(hdc, x1, y2);
-			LineTo(hdc, x2, y2);
-			LineTo(hdc, x2, y1);
-			LineTo(hdc, x1, y1);
-
 		}
 // 		dib_obj.Stretch(hdc, 100, 100, 0, 0, 0, 0, 0, 0, DIB_RGB_COLORS, SRCCOPY);
 
